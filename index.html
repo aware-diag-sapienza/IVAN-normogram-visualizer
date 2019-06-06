@@ -1,0 +1,4403 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+    @import url("tooltip/tipsy.css");
+    @import url("tooltip/jquery-ui-1.8.17.custom.css");
+body{
+  opacity: 1;
+}
+h1{
+    color: white; 
+    alignment-adjust: central;
+}
+.axis text {
+  font: 12px sans-serif;
+}
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+.h{
+  stroke:black;
+  stroke-width:1;
+  stroke-opacity:.4;
+}
+.v{
+  stroke: black;
+  stroke-width:1;
+  stroke-opacity:.5;
+}
+.title text{
+    font: 16px sans-serif;
+}
+.testo{
+    font: 11px sans-serif;
+}
+
+.testoSkewT{
+    font: 11px sans-serif;
+}
+
+.quoteisob{
+    font: 11px sans-serif;
+}
+.tlabel{
+    font: 12px sans-serif;
+}
+
+</style>
+</head>
+
+<body>
+<div id="container" style="width:1900px;height: 1200px">
+    <div id="header">
+        <div id="head" style="background-image: url(meteo7.jpg);">
+        <h1 style=" margin-bottom:0; margin-left: 400px; height: 35px;">IVAN: Interactive Herlofson's nomogram</h1>
+        </div>
+        <p id="oraSondag" style="margin-bottom: 0; margin-top: 15px; font: 20px sans-serif; margin-left: 100px; "></p>
+    </div>
+
+<script type="text/javascript" src="d3/d3.v3.min.js"></script>
+<script type="text/javascript" src="tooltip/jQuery/jquery-1.7.1.js"></script>
+<script type="text/javascript" src="tooltip/jquery-ui-1.8.17.custom.min.js"></script>
+<script type="text/javascript" src="tooltip/jquery.tipsy.js"></script>
+
+<script>
+var dati=new(Array);
+var metadati;
+var map= [{loc: "Pratica di Mare", id:16245},{loc: "Trapani/Birgi", id: 16429},{loc: "Brindisi", id: 16320}, 
+          {loc: "Cagliari/Elmas", id: 16560},{loc: "Ajaccio", id: 07761},{loc: "Milano/Linate", id: 16080},{loc: "Udine", id: 16044}];      
+var stringaInput;   
+
+</script>
+
+<div id="graph" style="height:760px; width:700px; float:left;">
+<script>
+//Area disegno 640 x 640  con 0--16 -40 +40 1km equivale a 5 gradi, da cui il *5 per skew T
+var margin = {top: 40, right: 40, bottom: 70, left: 40},//12
+    width = 720 - margin.left - margin.right,  //640
+    height = 750 - margin.top - margin.bottom,//640
+    granularity= {low: 10, medium: 5, high: 1};
+var ppt,
+    z;  
+var gran= 5,
+    filledArea="",
+    hmax= 16,
+    hmin= 0,  
+    tmax= 40, 
+    tmin= -40;
+	
+var   x = d3.scale.linear()
+	      .domain([tmin, tmax])//d3.min e d3.max  -40 +40
+		  .range([0, width]);// [0 640]
+       
+var   y = d3.scale.linear()
+       .domain([hmin, hmax])// [1 16]
+       .range([height, 0]); // [640 0]	
+	   
+var	 plog = d3.scale.log()
+	 .domain([102.53, 1013.25]) //dati ICAO
+     .range([16000, 0]); 
+
+		   	
+var debug=false;
+var debug1=true;
+var debug2=false;
+var debug3=false; //entrata funzioni	
+var svg;
+var lineAdiabatica;
+var assex;
+var margine;
+var gruppoAdSecca;
+var gruppoAdSatura;
+var gruppoIsoigromet;
+var pres0= 1023;//quota2p(0);
+var presMax= 100;//quota2p(16000);
+var tropopausa= 12;
+var colorIsoigr= "blue"; //"#CB181D";
+var colorAdSat= "blue"; //"#CB181D";
+var colorAdSec= "blue"; //"#CB181D";
+var colorState= "red"; //"#CB181D";
+var colorRugiuada= "blue"; //"#CB181D";
+var ascisseDewPointNotev=  new Array(2); //temperature usate per l'interpolazione
+var array_t= new Array();
+var tPrevisione=20;
+var Forecast=false;
+var rs=[];  //righe radiosondaggio
+
+//allineato all'array dentro creaLista_t
+var mix_notevoli= [0.1, 0.2, 0.4, 0.6, 0.8, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7 ,8, 9, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56,  60, 68, 76];
+var temp_mix_notev= [-41.91150000002101, -34.85100000001218, -27.346999999995354, -22.73649999999637, -19.35949999999697, -16.677999999997244, -11.659999999999316, -7.981999999998527, -5.0594999999985495, -2.6254999999988047, 1.3020000000012932, 4.4225000000013335, 7.021500000001325, 9.253500000001152, 11.21250000000119, 12.960500000001213, 14.540000000001271, 17.30800000000148, 19.682500000001575, 21.76500000000153, 23.620000000001543, 25.29450000000151, 28.2235000000016, 30.729000000001623, 32.920000000001394, 34.85000000000143, 36.60000000000133, 38.20000000000124, 39.65000000000116, 41.00000000000108, 42.25000000000101, 43.43100000000085, 45.548500000000814, 47.400000000000716];
+var pres_notevoli= [100,150,200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950,1000,1050];
+
+var pressione_base=pres0;
+array_t= creaLista_t();
+
+
+// dati caricati all'avvio
+var idLoc="16245";
+var inputGlobalData= "201311151216245.csv";
+var inputGlobalMetaData= "201311151216245meta.csv";
+
+var Curves_adiabatichesecche=false;
+var Curves_adiabatichesature=false;
+var Curves_isoigrometriche=false;
+var Axes_guides=true;           // Cosa fanno?
+var Curves_isometriche=false;
+var Curves_isobare=true;
+var Curves_labelmix=true;
+var Curves_quoteisobare=true;
+var PuntiSoundingso=false;
+var Curves_stato=true;
+var Curves_rugiada=true;
+var IsoSwap=true;
+var G_pasted=false;
+var Gdata=new Array();
+var Gmdata=new Array();
+var Ginformazioni;
+var Cin=false;
+var Cin500=false;
+var MixCin=0; //Mix utilizzato per calcolare il CIN
+var TCin=20;  //T usato per calcolare il CIN    Son Mix e T del primo punto della curva di rugiada
+var PCin=1013;
+var Cape=false;
+
+var datiSoundingso="";
+var Gintestazione;
+var localita="Pratica di Mare";
+//console.log("Definizione globale:",Curves_adiabatichesecche,Curves_adiabatichesature,Curves_isoigrometriche,Axes_guides,Curves_isometriche,Curves_isobare);
+
+
+var actualState= inputGlobalData;
+var actualMetaState= inputGlobalMetaData;
+var year= actualState.substring(0,4);
+var month= actualState.substring(4,6);
+var day= actualState.substring(6,8);
+var hour= actualState.substring(8,10);
+
+actualState= year+month+day+hour+16245+".csv";
+actualMetaState= year+month+day+hour+16245+"meta.csv";
+inputData= year+month+day+hour+16245+".csv";//actualState;
+inputMetaData= actualMetaState;
+
+// Funzioni di disegno *****************************************************
+function drawIsobarsLabels(swap){
+    if (swap){
+        var cx1=-5;
+        var cx11=-30;
+        var cx2=0;
+        var ctxt=-30;
+    }
+    else {
+        var cx1=width;
+        var cx11=width+15;
+        var cx2=width+5;
+        var ctxt=width+15;
+    }
+    
+    svg.append("g")
+    .attr("class", "y axis")
+    .append("text")
+    .attr("x", cx11)
+    .attr("y", -35)
+    .attr("dy", "15px")
+    .text("hPa");
+
+    for (i in pres_notevoli){
+        var altezza_notev= p2THGT(pres_notevoli[i])/1000;
+        var altPix= y(altezza_notev);
+      
+        svg.append("line")
+        .attr("x1",cx1).attr("x2",cx2)
+        .attr("y1",altPix).attr("y2",altPix)
+        .attr("stroke","#010101")
+        .attr("stroke-opacity", 1)
+        .attr("stroke-width", .8);
+        if (i==19) altPix=645;
+        if (i==0) altPix=+5;
+        svg.append("text")
+        .attr("x",ctxt)
+        .attr("y",altPix-1)
+        .attr("class", "testo")
+        .text(Math.round(pres_notevoli[i]));
+    }
+}
+
+function drawBordo(){
+    svg.append("line")
+    .attr("x1",0).attr("x2",0)
+    .attr("y1",y(16)).attr("y2",y(0))
+    .attr("stroke","#010101")
+    .attr("stroke-opacity", 1)
+    .attr("stroke-width", 2);
+    
+    
+    svg.append("line")
+    .attr("x1",640).attr("x2",640)
+    .attr("y1",y(16)).attr("y2",y(0))
+    .attr("stroke","#010101")
+    .attr("stroke-opacity", 1)
+    .attr("stroke-width", 2);
+    
+    svg.append("line")
+    .attr("x1",0).attr("x2",640)
+    .attr("y1",y(0)).attr("y2",y(0))
+    .attr("stroke","#010101")
+    .attr("stroke-opacity", 1)
+    .attr("stroke-width", 2);
+    
+    svg.append("line")
+    .attr("x1",0).attr("x2",640)
+    .attr("y1",y(16)).attr("y2",y(16))
+    .attr("stroke","#010101")
+    .attr("stroke-opacity", 1)
+    .attr("stroke-width", 2);
+
+}
+
+function drawIsometricsLabels(swap){
+    if (!swap){
+        var cx1=-5;
+        var cx11=-30;
+
+        var cx2=0;
+        var ctxt=-20;
+    }
+    else {
+        var cx1=width;
+        var cx11=width+5;
+
+        var cx2=width+5;
+        var ctxt=width+10;
+    }
+    
+    
+    svg.append("g")
+    .attr("class", "y axis")
+    .append("text")
+    .attr("x", cx11)
+    .attr("y", -35)
+    .attr("dy", "15px")
+    .text("Km");
+
+    
+    for (var i=0;i<=16;i++) {
+        var altPix= y(i);
+        svg.append("line")
+        .attr("x1",cx1).attr("x2",cx2)
+        .attr("y1",altPix).attr("y2",altPix)
+        .attr("stroke","#010101")
+        .attr("stroke-opacity", 1)
+        .attr("stroke-width", .8);
+        
+        svg.append("text")
+        .attr("x",ctxt)
+        .attr("y",altPix+1)
+        .attr("class", "testo")
+        .text(i);
+    }
+}
+
+function drawIsometrics(){
+    for (var i in [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]){
+        var altPix= y(i);
+        svg.select("#isom"+i).remove();
+        svg.append("line")
+        .attr("class","isometriche")
+        .attr("id","isom"+i)
+        .attr("x1",0).attr("x2",width)
+        .attr("y1",altPix).attr("y2",altPix)
+        .attr("stroke","#010101")
+        .attr("stroke-opacity", 1)
+        .attr("stroke-width", .8);
+    }
+    drawPIsometrics();
+}
+
+function drawIsobars(){
+    for (var i=1; i< pres_notevoli.length; i++){
+        var altezza_notev= p2THGT(pres_notevoli[i])/1000;
+        var altPix= y(altezza_notev);
+        svg.select("#isob"+i).remove();
+        svg.append("line")
+        .attr("class","isobare")
+        .attr("id","isob"+i)
+        .attr("x1",0).attr("x2",width)
+        .attr("y1",altPix).attr("y2",altPix)
+        .attr("stroke","#010101")
+        .attr("stroke-opacity", 1)
+        .attr("stroke-width", .8);
+    }
+    drawQuoteIsobars();
+}
+
+//disegna l'asse con i valori dei mix
+function drawLabelMix(color){
+    for (var i in mix_notevoli){
+        var mix= mix_notevoli[i];
+        var temp = mix2Temp(mix);
+        var unit="";
+        var offset=0;
+        if (mix=="0.2"){
+            unit="mix (g/kg) ";
+            offset=-50;
+        }
+        if (temp< tmax && temp> tmin){
+            svg.append("text")
+            .attr("class", "labelmix")
+            .attr("id", "label"+i)
+            .attr("x", x(temp)+offset)
+            .attr("y", y(-0.25))
+            .attr("dy", ".2em")
+            .attr("fill", "blue")
+            .text(unit+mix)
+            .style("font-size", "10px")
+            .style("font-weight", "bold");
+            
+        }
+    }
+}
+
+function drawQuoteIsobars(){
+    var altPix;
+    var altezza_notev;
+    var debug=true;
+    for (var i in pres_notevoli){
+        altezza_notev= p2THGT(pres_notevoli[i])/1000;
+        altPix= y(altezza_notev);        
+        if (pres_notevoli[i]!=100 && i!=19){
+        svg.append("text")
+        .attr("class","quoteisob")
+        .attr("id","qisob"+i)
+        .attr("x",width-630)
+        .attr("y",altPix-3)
+        .style("font-size", "10px")
+        .text(Math.round(rH(p2THGT(pres_notevoli[i])))+' m');
+        }
+    }   
+}
+
+function drawPIsometrics(){
+    var debug=false;
+    if (debug) console.log("drawPIsometrics START");
+    var altPix;
+    var press_notev;
+    for (var i=0; i<16; i++){
+        press_notev= Math.round(quota2Tp(i));
+        if (debug) console.log(i,press_notev);
+        altPix= y(i);
+        if (debug) console.log(i,altPix);
+        svg.append("text")
+        .attr("class","quoteisob")
+        .attr("id","pisom"+i)
+        .attr("x",width-630)
+        .attr("y",altPix-3)
+        .style("font-size", "10px")
+        .text(press_notev+' hPa');
+        }
+    if (debug) console.log("drawPIsometrics STOP");    
+    }   
+
+
+
+//disegna le label delle temperature in alto
+function drawLabelTalte(color){
+    var i=0;
+    var range=tmax-tmin;
+    for (i=tmin-range;i<=tmin;i+=5){
+        var temp = i+range;
+        var unit="";
+        var offset=12;
+        if (true){
+            svg.append("text")
+            .attr("class", "tlabel")
+            .attr("id", "label"+i)
+            .attr("x", x(temp)-offset)
+            .attr("y", y(hmax)-12)
+            .attr("dy", ".2em")
+            .attr("fill", "black")
+            .text(i+String.fromCharCode(176))
+            
+            svg.append("line")
+            .attr("x1",x(temp)).attr("x2",x(temp))
+            .attr("y1",y(hmax)).attr("y2",y(hmax)-7)
+            .attr("stroke","#010101")
+            .attr("stroke-opacity", 1)
+            .attr("stroke-width", .8);
+            
+        }
+    }
+}
+
+//disegna le label delle temperature in basso
+function drawLabelTbasse(color){
+    var i=0;
+    var range=tmax-tmin;
+    var cerchi=(tmax-tmin)/5;
+    for (i=tmin;i<=tmax;i+=5){
+        var temp = i;
+        var unit="";
+        var offset=10
+        var yy=660
+        if (true){
+            svg.append("text")
+            .attr("class", "tlabel")
+            .attr("id", "label"+i)
+            .attr("x", x(temp)-offset)
+            .attr("y", yy)
+            .attr("dy", ".2em")
+            .attr("fill", "black")
+            .text(i+String.fromCharCode(176))
+            
+            svg.append("line")
+            .attr("x1",x(temp)).attr("x2",x(temp))
+            .attr("y1",y(hmin)).attr("y2",y(hmin)+7)
+            .attr("stroke","#010101")
+            .attr("stroke-opacity", 1)
+            .attr("stroke-width", .8);
+        }
+    }
+}
+
+function drawSkewT(){
+    var g=0,
+    quanteDiagonali=0,
+    dataXA=[],
+    dataYA=[],
+    dataXB=[],
+    dataYB=[];
+    
+    d3.selectAll(".v").remove();
+    d3.selectAll(".filledArea").remove();
+    d3.selectAll(".bluCircle").remove();
+    d3.selectAll(".redCircle").remove();
+    d3.selectAll(".testoSkewT").remove();
+    quanteDiagonali=0;
+    if (frm3.grana[0].checked)
+    g=0;
+    else
+    {
+        for(i=0; i< frm3.grana.length; ++i){ // viene innescato un ciclo, per il numero degli elementi di opzione
+            if(frm3.grana[i].checked){ //se l'alternativa è stata spuntata
+                g= frm3.grana[i].value;
+                break;
+            }
+        }
+        //console.log("<d3.select(frm3).on(click, function()> g:",g);
+        if (g === "10"){ gran = granularity.low;}
+        else if (g === "5"){gran = granularity.medium;}
+        else {gran = granularity.high;}
+        ppt= width/((tmax-tmin)/gran);
+        //console.log("<d3.select(frm3).on(click, function()> ppt: ",ppt);
+        
+        //console.log("<d3.select(frm3).on(click, function()> svg.selectAll('.v'):",svg.selectAll(".v"));
+        
+        svg.selectAll(".v").data(d3.range(-(2*Math.abs(tmin)+Math.abs(tmax)), tmax, gran)).enter()//.exit().remove();
+        .append("line").classed("v",1)
+        .attr("id", function(d,i){ quanteDiagonali= i; return "temp"+i;})
+        .attr("y1",function(d,i){ if (d < tmin){ return (ppt)*i; } else return height;})
+        .attr("y2",function(d){ if (d < tmin){ return 0;} else return x(d); //((8*gran)*(i-(7*(10/gran))));
+              })
+              .attr("x1",function(d){ if (d < tmin){ return 0;} else return x(d);//x((i-8)*80)
+                    })
+                    .attr("x2",function(d,i){
+                          if (d < tmin){ return (ppt)*i; }//8
+                          else return width; });
+                          
+                          var kk=svg.selectAll(".v");
+                          //console.log("<d3.select(frm3).on(click, function()> kk",kk);
+                          //console.log("<d3.select(frm3).on(click, function()> svg.selectAll('.v'):",svg.selectAll(".v"));
+                          //console.log("<d3.select(frm3).on(click, function()> quanteDiagonali:",quanteDiagonali);
+                          
+                          
+                          for (f= 0;f<= quanteDiagonali; f++){
+                              if (f%2!==0){
+                                  dataXB=[];
+                                  //console.log("<d3.select.(frm3)> d3.select('#temp').attr('x1')",f,d3.select("#temp"+f).attr("x1"));
+                                  dataXB[0]=d3.select("#temp"+f).attr("x1");
+                                  dataXB[1]=d3.select("#temp"+f).attr("x2");
+                                  dataYB=[];
+                                  dataYB[0]=d3.select("#temp"+f).attr("y1");
+                                  dataYB[1]=d3.select("#temp"+f).attr("y2");
+                                  dataXA=[];
+                                  dataXA[0]=d3.select("#temp"+(f-1)).attr("x1");
+                                  dataXA[1]=d3.select("#temp"+(f-1)).attr("x2");
+                                  dataYA=[];
+                                  dataYA[0]=d3.select("#temp"+(f-1)).attr("y1");
+                                  dataYA[1]=d3.select("#temp"+(f-1)).attr("y2");
+                                  
+                                  filledArea="M"+dataXA[0]+" "+dataYA[0]+" L"+dataXA[1]+" "+dataYA[1]+" L"+dataXB[1]+" "+dataYB[1]+" L"+dataXB[0]+" "+dataYB[0]+" Z";
+                                  
+                                  svg.append("svg:path")
+                                  .attr("class","filledArea")
+                                  .attr("d",filledArea)
+                                  .attr("fill","yellow")
+                                  .attr("stroke","black")
+                                  .attr("fill-opacity","0.2");
+                                  
+                                  if (gran>=5){
+                                      
+                                  svg.append("text")
+                                  .attr("class", "testoSkewT")
+                                  .attr("id", "labelT"+f)
+                                  .attr("x", x(-13.5))
+                                  .attr("y", y(0.5+f))
+                                  .attr("dy", ".1em")
+                                  .attr("fill", "black")
+                                  .text(-15-f*5+String.fromCharCode(176))
+                                  }
+                              }
+                          }
+    }
+    drawState();
+    drawDewPoint();
+}
+
+//crea i path corrispondenti ad ogni curva delle adiab Sature
+function drawAdSatura(){
+    var debug=false;
+    if (debug) console.log("<drawAdSatura> START");
+    var temperat;
+    array_t= creaLista_t();
+    for (var k= 0; k< array_t.length; k++){
+        if (debug)console.log("k:",k);
+        temperat= array_t[k];
+        var actualMix= mix_notevoli[k];
+        //console.log(actualMix);
+        var ris = adiabSatura2(temperat,0, actualMix);
+        if (debug) console.log("k:",k,"ris:", ris);
+        gruppoAdSatura[k]= ris;
+        //console.log("ris:", k, ris);
+        //console.log("gruppoAdSatura[0]", gruppoAdSatura[0]);
+        //text(a);
+
+        svg.append("path")
+        .attr("class", "adiabSat")
+        .attr("id", "adSat"+k)
+        .attr("d", lineAdiabaticaT(gruppoAdSatura[k]))
+        .attr("stroke", "purple")
+        .attr("stroke-dasharray", "2,2,2,2")
+        .attr("stroke-width", function(){
+              //console.log(k);
+              if (k%5 === 0) return 1.5;
+              else return 1;
+              })
+              .attr("fill", "none")
+              .attr("opacity", 1)
+              .attr("clip-path", "url(#plot-region)");
+    }
+    if (debug) console.log("<drawAdSatura> STOP");
+}
+
+
+
+function drawState(){
+	var debug=false;
+	if (debug) console.log("start drawState");
+    var opa=0;
+	if (PuntiSoundingso && Curves_stato) opa=0.3;
+	svg.selectAll(".redCircle").remove();
+	if (debug) console.log("dati:",dati);
+    svg.selectAll(".redCircle").data(dati).enter()
+    .append("circle").attr("class", "redCircle")
+    .attr("cx",function(d) { return x((d.TEMP) + 5*d.HGHT);})
+    .attr("cy",function(d) { return y(d.HGHT);})
+    .attr("r", 3)
+    .each(linkTooltip)
+    .style("fill", "black")
+    .style("opacity",opa)
+    .on("mouseover", function(d){
+                    var currentCircle= d3.select(this);
+                    currentCircle.attr("r", 5)
+                    .style("opacity", 0.3);
+                    
+                    if (Axes_guides){
+                    svg.append("line").attr("class", "proiezY")
+                    .attr("x1", 0).attr("y1", y(d.HGHT))
+                    .attr("x2", x((d.TEMP) + 5*d.HGHT) ).attr("y2", y(d.HGHT))//gran
+                    .attr("stroke", "black")
+                    .attr("stroke-width", 1.5)
+                    .attr("stroke-dasharray", 4)
+                    .style("opacity", 1)
+                    .attr("clip-path", "url(#plot-region)");
+                    
+                    svg.append("line").attr("class", "proiezX")
+                    .attr("x1", x((d.TEMP) + 5*d.HGHT)).attr("y1", y(d.HGHT))
+                    .attr("x2", x(d.TEMP)).attr("y2", height)
+                    .attr("stroke", "black")
+                    .attr("stroke-width", 1.5)
+                    .attr("stroke-dasharray", 4)
+                    .style("opacity", 1)
+                    .attr("clip-path", "url(#plot-region)");
+                    }
+					
+					if (Curves_rugiada && Axes_guides){
+						var mix=interpolatedMix(dati,d.PRES);
+						var Xmix=tD(pressione_base,mix); //Beppelast
+                        //var Xmix=Math.round(interpolatedTDWPT(dati,d.PRES)*100)/100;
+						console.log("mix:",mix,"Xmix:",Xmix);
+
+                        if (mix>0)
+                            //svg.append("line").attr("class", "proiezisoIg").attr("x1", x(tD(d.PRES,mix) +5*d.HGHT)).attr("y1", y(d.HGHT))
+                            svg.append("line").attr("class", "proiezisoIg")
+                            //.attr("x1", x(tD(d.PRES,mix) +5*d.HGHT)).attr("y1", y(d.HGHT))
+                            .attr("x1", x(interpolatedTDWPT(dati,d.PRES) +5*d.HGHT)).attr("y1", y(d.HGHT))
+                            .attr("x2", x(Xmix)).attr("y2", height)
+                            .attr("stroke", "blue")
+                            .attr("stroke-width", 1.5)
+                            .attr("stroke-dasharray", 4)
+                            .style("opacity", 1)
+                            .attr("clip-path", "url(#plot-region)");
+                            
+                             svg.append("line").attr("class", "proiezisoIgx")
+                            //.attr("x1", x(tD(d.PRES,mix) +5*d.HGHT)).attr("y1", y(d.HGHT))
+                            .attr("x1", x(interpolatedTDWPT(dati,d.PRES) +5*d.HGHT)).attr("y1", y(d.HGHT))
+                    		.attr("x2", x(d.DWPT)).attr("y2", height)
+                    		.attr("stroke", "black")
+                    		.attr("stroke-width", 1.5)
+                    		.attr("stroke-dasharray", 4)
+                    		.style("opacity", 1)
+                    		.attr("clip-path", "url(#plot-region)");                   
+					}
+                    })
+                    .on("mouseout", function(){
+                        var currentCircle= d3.select(this);
+                        currentCircle.attr("r", 3)
+                        .style("opacity", opa);
+                        svg.select(".proiezX").remove();
+                        svg.select(".proiezY").remove();
+                        svg.select(".proiezisoIg").remove();
+                        svg.select(".proiezisoIgx").remove();
+                        });
+}
+
+function drawDewPoint(){
+    var opa=0;
+	if (PuntiSoundingso && Curves_rugiada) opa=0.3;
+	svg.selectAll(".bluCircle").remove();
+    svg.selectAll(".bluCircle").data(dati).enter()
+    .append("circle").attr("class", "bluCircle")
+    .attr("cx",function(d) { return x((d.DWPT) + 5*d.HGHT);})
+    .attr("cy",function(d) { return y(d.HGHT); })
+                .attr("r", 3)
+                .each(linkTooltip_rugiada)
+                .style("fill", "black")
+                .style("opacity",opa)
+                .attr("stroke","#010101")
+                .on("mouseover", function(d){
+                    var currCircle= d3.select(this);
+                    currCircle.attr("r", 5)
+                    .style("opacity", 0.5);
+                    
+                    svg.append("line").attr("class", "proiezY").attr("x1", 0).attr("y1", y(d.HGHT))
+                    .attr("x2", x((d.DWPT) + 5*d.HGHT) ).attr("y2", y(d.HGHT))//gran
+                    .attr("stroke", "black")
+                    .attr("stroke-width", 1.5)
+                    .attr("stroke-dasharray", 4)
+                    .style("opacity", 1)
+                    .attr("clip-path", "url(#plot-region)");
+                    
+                    svg.append("line").attr("class", "proiezX")
+                    .attr("x1", x((d.DWPT) + 5*d.HGHT)).attr("y1", y(d.HGHT))
+                    .attr("x2", x(d.DWPT)).attr("y2", height)
+                    .attr("stroke", "black")
+                    .attr("stroke-width", 1.5)
+                    .attr("stroke-dasharray", 4)
+                    .style("opacity", 1)
+                    .attr("clip-path", "url(#plot-region)");
+                    
+                    var mix=interpolatedMix(dati,d.PRES);
+                    var Xmix=tD(pressione_base,mix); //Beppelast
+                    //var Xmix=Math.round(interpolatedTDWPT(dati,d.PRES)*100)/100;
+                    //console.log("mix:",mix,"Xmix:",Xmix);
+					
+					if (Curves_labelmix && mix>0){
+                    
+                    svg.append("line").attr("class", "proiezisoIg")
+                    //.attr("x1", x(tD(d.PRES,mix) +5*d.HGHT)).attr("y1", y(d.HGHT))
+                    .attr("x1", x(interpolatedTDWPT(dati,d.PRES) +5*d.HGHT)).attr("y1", y(d.HGHT))
+                    .attr("x2", x(Xmix)).attr("y2", height)
+                    .attr("stroke", "blue")
+                    .attr("stroke-width", 1.5)
+                    .attr("stroke-dasharray", 4)
+                    .style("opacity", 1)
+                    .attr("clip-path", "url(#plot-region)");
+				}
+                    })				
+                    .on("mouseout", function(){
+                        var currCircle= d3.select(this);
+                        currCircle.attr("r", 3)
+                        .style("opacity", opa);
+                        svg.select(".proiezX").remove();
+                        svg.select(".proiezY").remove();
+                        svg.select(".proiezisoIg").remove();
+                        });
+    
+}
+
+
+
+
+
+//crea i path corrispondenti ad ogni curva delle isoigrometriche
+//, una per ogni valore di temperatura relativa al mix contenuto nell'array mix_notevoli
+function computeIsogrom(){
+    var temp;
+    var j;
+    for (j= 0; j< array_t.length; j++){
+    //for (j= 0; j< 1; j++){
+        temp= array_t[j];
+        //console.log("temp: "+temp);
+        var ris = isoigromet2(temp,0);
+        gruppoIsoigromet[j]= ris;
+    }
+}
+
+function drawIsoigrom2(){
+    var temp;
+    //array_t= creaLista_t();
+    var j;
+    for (j= 0; j< array_t.length; j++){
+    //for (j= 0; j< 1; j++){
+        temp= array_t[j];
+        //console.log("temp: "+temp);
+        //               var ris = isoigromet2(temp,0);
+        //gruppoIsoigromet[j]= ris;
+        svg.append("path")
+        .attr("class", "isoigrom")
+        .attr("id", "isogr"+j)
+        //.attr("d", lineAdiabaticaT(ris))
+        .attr("d", lineAdiabaticaT(gruppoIsoigromet[j]))
+        .attr("stroke", colorIsoigr)
+        .attr("stroke-dasharray", "15,10,5,10")
+        .attr("stroke-width", function(){
+              //console.log(j);
+              if (j%5 === 0) return 1.5;
+              else return 1;
+              })
+              .attr("fill", "none")
+              .attr("opacity", 1)
+              .attr("clip-path", "url(#plot-region)");
+    }
+}
+
+function drawCin(){
+    var debug=false;
+    var ls=0;//Livello del sondaggio considerato 0, 1, 2
+    if (debug) console.log("<drawCin> START");
+    var trueTEMP=dati[ls].TEMP;
+    var truePress= dati[ls].PRES;
+    var trueHGHT= dati[ls].HGHT;
+    var mix= dati[ls].MIXR;
+    var temp= dati[ls].DWPT;
+    
+    if (Cin500){
+        
+    trueTEMP=0;
+    truePress= 0;
+    //trueHGHT= 0;
+    mix= 0;
+    temp= 0;
+    var k=0;
+     console.log("k:",k);
+    while (dati[k].HGHT<0.500)
+    ++k;
+    
+    console.log("k:",k);
+
+    for (var i=0;i<k;i++)
+    {
+        trueTEMP+=dati[i].TEMP;
+        truePress+= dati[i].PRES;
+        //trueHGHT+= dati[i].HGHT;
+        mix+= dati[i].MIXR;
+        temp+= dati[i].DWPT;
+    }
+    
+    trueTEMP=trueTEMP/k;
+    trueTEMP=dati[0].TEMP;
+    truePress= truePress/k;
+    //truePress= dati[0].PRES;
+    //trueHGHT= dati[k-1].HGHT/2;
+    trueHGHT= 0.250;
+    mix= mix/k;
+    temp= temp/k;
+    }
+  
+    //console.log("<drawCin coordx coord y",,,"trueTEMP:", trueTEMP,"dati[ls].TEMP=",dati[ls].TEMP);
+    if (debug) console.log("toClick T:",trueTEMP, "H:",trueHGHT, "p:",truePress);
+    
+    if (debug) console.log("toClick mix:",mix, "corrispondente a una p:",truePress);
+    
+    if (debug) console.log("<drawCin T da cui parte isoigrometrica:",temp);
+            
+    var arrayRis= MoistAdiabat_old(trueTEMP, quota2Tp(trueHGHT), mix);
+    var highSat= arrayRis[0]/1000;
+    var tempSat= arrayRis[1];
+    if (debug) console.log("higSat:",highSat, "tempSat:",tempSat, "mix partenza:",mix);
+    var tempState;
+    var altState;
+    for (k= 0; k< dati.length-1; k++){
+        if (highSat === dati[k].HGHT){
+            tempState= dati[k].TEMP;
+            altState= dati[k].HGHT;
+        }
+        else{
+            if (dati[k].HGHT< highSat && dati[k+1].HGHT> highSat){
+                tempState= (dati[k].TEMP+ dati[k+1].TEMP)/2;
+                altState= (dati[k].HGHT+ dati[k+1].HGHT)/2;
+            }
+        }
+    }
+    
+    if (debug) console.log("<drawCin highSat: ",highSat);
+    //var ris2 = adiabForClick2(dati,tempSat, highSat, tempSat, mix);
+    var ris2=adiabSatura3(tempSat,quota2Tp(highSat), mix,10);
+    
+    //if (debug) console.log("<drawCin temp: ",temp,"tempSat:",tempSat,"higSat",highSat,"pressione:",quota2p(highSat*1000));
+    var ris= isoigromForClick(temp, tempSat, highSat);
+                
+    if (Cin500 || true)
+        svg.append("path")          //isoigromerica
+                .attr("class","cin")
+                .attr("id", "cinIsogr")
+                .attr("d", lineAdiabaticaT(ris))
+                .attr("stroke", colorIsoigr)
+                .attr("stroke-width", 2)
+                .attr("stroke-dasharra", 4)
+                .attr("fill", "none")
+                .attr("opacity", 1)
+                .attr("clip-path", "url(#plot-region)");
+                
+    svg.append("path") //ad satura
+                .attr("class","cin")
+                .attr("id", "cinAdSat")
+                .attr("d", lineAdiabaticaT(ris2))
+                .attr("stroke", "purple")
+                .attr("stroke-width", 3)
+                .attr("fill", "none")
+                .attr("opacity", 1)
+                .attr("clip-path", "url(#plot-region)");
+                
+    svg.append("line") //ad secca
+                .attr("class","cin")
+                .attr("id", "cinadiabSeccaSalita")
+                .attr("x1", x(trueTEMP+5*trueHGHT))
+                .attr("y1", y(trueHGHT))
+                .attr("x2", x(tempSat+ 5*highSat)).attr("y2", y(highSat))
+                .attr("stroke", "green")
+                .attr("stroke-width", 3)
+                .style("opacity", 1)
+                .attr("clip-path", "url(#plot-region)");
+}// end drawCin
+
+//crea la linea corrispondente alla tropopausa
+function drawTropopause(){
+    console.log("<drawTropopause> START");
+    svg.append("line").attr("id", "tropopausa").attr("x1", x(tmin))
+    .attr("y1", y(tropopausa))
+    .attr("x2", x(tmax))
+    .attr("y2", y(tropopausa))//gran
+    .attr("stroke", "orange")
+    .attr("stroke-width", 2)
+    .style("opacity", 1);
+}
+
+//ridisegna il diagramma con i nuovi valori di temperatura e altezza impostati nella form
+function updateGraph(){
+    //var i= frm4.hMin.selectedIndex;
+    var uhmin = 0;//eval(frm4.hMin[i].value);
+    
+    //var j= frm4.hMax.selectedIndex;
+    var uhmax = hmax;//eval(frm4.hMax[j].value);
+    
+    var k= frm4.tMin.selectedIndex;
+    var utmin = eval(frm4.tMin[k].value);
+    
+    var l= frm4.tMax.selectedIndex;
+    var utmax = eval(frm4.tMax[l].value);
+    var ugran= gran;
+    //console.log(hmin);
+    //console.log(hmax);
+    //Impone rapporto di forma
+    var px=(utmax-utmin)/(tmax-tmin);
+    var py=(uhmax-uhmin)/(hmax-hmin);
+    var ar=py/px;
+    console.log("px,py,ar",px,utmax,utmin,tmax,tmin,py,ar);
+    if (ar>1)
+    uhmax=Math.round(hmax*px);
+    
+    
+    //hmin=uhmin;
+    //hmax=uhmax;
+    //tmin=utmin;
+    //tmax=utmax;
+    drawGraph(ugran, uhmax, uhmin, utmax, utmin, inputData);
+}
+
+jQuery.ajax = (function(_ajax){
+               
+               var protocol = location.protocol,
+               hostname = location.hostname,
+               exRegex = RegExp(protocol + '//' + hostname),
+               YQL = 'http' + (/^https/.test(protocol)?'s':'') + '://query.yahooapis.com/v1/public/yql?callback=?',
+               query = 'select * from html where url="{URL}" and xpath="*"';
+               
+               function isExternal(url) {
+               return !exRegex.test(url) && /:\/\//.test(url);
+               }
+               
+               return function(o) {
+               
+               var url = o.url;
+               
+               if ( /get/i.test(o.type) && !/json/i.test(o.dataType) && isExternal(url) ) {
+               
+               // Manipulate options so that JSONP-x request is made to YQL
+               
+               o.url = YQL;
+               o.dataType = 'json';
+               
+               o.data = {
+               q: query.replace(
+                                '{URL}',
+                                url + (o.data ?
+                                       (/\?/.test(url) ? '&' : '?') + jQuery.param(o.data)
+                                       : '')
+                                ),
+               format: 'xml'
+               };
+               
+               // Since it's a JSONP request
+               // complete === success
+               if (!o.success && o.complete) {
+               o.success = o.complete;
+               delete o.complete;
+               }
+               
+               o.success = (function(_success){
+                            return function(data) {
+                            
+                            if (_success) {
+                            // Fake XHR callback.
+                            _success.call(this, {
+                                          responseText: (data.results[0] || '')
+                                          // YQL screws with <script>s
+                                          // Get rid of them
+                                          .replace(/<script[^>]+?\/>|<script(.|\s)*?\/script>/gi, '')
+                                          }, 'success');
+                            }
+                            
+                            };
+                            })(o.success);
+               
+               }
+               
+               return _ajax.apply(this, arguments);
+               
+               };
+               
+               })(jQuery.ajax);
+function estimatePres0(){
+    // nei primi 50 metri la pressione ICAO varia di circa 6 hPa (1013 1007)
+    // nei primi 100 metri la pressione ICAO varia di circa 12 hPa (1013 1001)
+    // nei primi 150 metri la pressione ICAO varia di circa 18 hPa (1013 995)
+    // nei primi 200 metri la pressione ICAO varia di circa 24 hPa (1013 989)
+    // 8.3 hPA per ogni 100 m
+    if (dati[0].THGHT > 0) return dati[0].PRES +83 *dati[0].THGHT;
+    if (dati[0].THGHT == 0) return dati[0].PRES;
+    if (dati[0].THGHT < 0) return dati[0].PRES -83 *dati[0].THGHT;
+}
+
+function drawGraph(granular, altezzaMax, altezzaMin, temperatMax, temperatMin, inputData){
+//console.log("drawGraph A:",Curves_adiabatichesecche,Curves_adiabatichesature,Curves_isoigrometriche,Axes_guides,Curves_isometriche,Curves_isobare);
+    
+inputGlobalData= inputData;
+d3.select("#mainDrawArea").remove();    
+
+d3.csv('radios/'+inputData, function(data){
+       if (G_pasted){
+            data=[];
+            for (i in Gdata)
+                data[i]=Gdata[i];
+       }
+       if (debug) console.log("data:",data);
+       gran= granular,
+       hmax= altezzaMax,
+       hmin= altezzaMin,
+       tmax= temperatMax,
+       tmin= temperatMin;
+       margine= 100;
+       gruppoAdSecca= new Array((tmax-tmin)/gran);
+       
+       gruppoAdSatura= new Array((tmax-tmin)/gran);
+       gruppoIsoigromet= new Array((tmax-tmin)/gran); //
+       dati= new Array();
+
+
+
+       for (i in data){
+
+        var newOgg = data[i];
+        //console.log('newOgg:',newOgg);
+        if (newOgg.HGHT!== null && newOgg.TEMP!== null && newOgg.DWPT!== null && newOgg.HGHT <= hmax*1000 && newOgg.HGHT >= hmin*1000 ){
+                //&& newOgg.TEMP<= tmax && newOgg.TEMP>= tmin && newOgg.DWPT<= tmax && newOgg.DWPT>= tmin){
+        newOgg.POS=i;
+
+        newOgg.PRES= parseFloat(newOgg.PRES);
+
+        newOgg.THGHT= newOgg.HGHT/1000;
+        newOgg.HGHT= newOgg.HGHT/1000;
+
+        //newOgg.HGHT= p2quota(newOgg.PRES)/1000;
+        newOgg.TEMP= parseFloat(newOgg.TEMP);
+        newOgg.DWPT= parseFloat(newOgg.DWPT);
+        newOgg.RELH= parseFloat(newOgg.RELH);
+        newOgg.MIXR= parseFloat(newOgg.MIXR);
+        //newOgg.DRCT= parseFloat(newOgg.DRCT);
+        //newOgg.SKNT= parseFloat(newOgg.SKNT);
+        //newOgg.THTA= parseFloat(newOgg.THTA);
+        //newOgg.THTE= parseFloat(newOgg.THTE);
+        //newOgg.THTV= parseFloat(newOgg.THTV);
+        dati.push(newOgg);
+        //if (i==0) console.log('i == 0',data[i],dati[i]);
+     }
+    }
+    //pres0= dati[0].PRES+6-6*(50-dati[0].THGHT*1000)/50;
+    console.log("dati[0]",dati[0]);
+    console.log("sto per stimare");
+    pres0=estimatePres0();
+    console.log("stimato");
+    //console.log("Lettura  csv pres0:",pres0);
+    pres_notevoli[19]=Math.round(pres0);
+    pres_notevoli[19]=pres0;
+    //pres_notevoli[19]=dati[0].PRES;
+    pressione_base=pres0;
+    array_t= creaLista_t();
+    computeIsogrom();
+    //pres0=dati[0].PRES;
+    MixCin=dati[0].MIXR;
+    TCin=dati[0].TEMP;
+    PCin=dati[0].PRES;
+    if (debug) console.log("dati, MixCin,TCin",dati,MixCin,TCin,Cin);
+       
+
+    datiSoundingso="";
+
+    for (i in dati)
+       if (i<10)
+            datiSoundingso+=i+"  "+dati[i].PRES+"\t  "+dati[i].THGHT+"\t  "+dati[i].TEMP+"\t  "+dati[i].DWPT+"\t    "+dati[i].RELH+"\t   "+dati[i].MIXR+'\n';
+       else datiSoundingso+=i+" " +dati[i].PRES+"\t  "+dati[i].THGHT+"\t  "+dati[i].TEMP+"\t  "+dati[i].DWPT+"\t    "+dati[i].RELH+"\t   "+dati[i].MIXR+'\n';
+ 
+       
+       
+       frm7.sondaggio.value=datiSoundingso;
+
+       
+       //console.log("dati:",dati);
+       var elem= document.getElementById("graph");
+       svg = d3.select(elem)
+            .append("svg")
+            .attr("id", "mainDrawArea")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("id", "lineGraphGroup")
+            .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+       //console.log(elem);
+
+      
+       
+    
+       
+       
+       
+
+       svg.append("clipPath")
+	.attr("id","plot-region")
+	.append("rect")
+        .attr("id", "selArea")
+	.attr("width",width)
+	.attr("height",height);
+
+       d3.select("#mainDrawArea").on("click", toClick);
+
+    var xAxis = d3.svg.axis()
+    .scale(x)
+    .orient("bottom");
+    
+    //xAxis.ticks((tmax-tmin)/5);
+    xAxis.ticks(0);
+
+       var label= [quota2Tp(0), quota2Tp(1000), quota2Tp(2000), quota2Tp(3000), quota2Tp(4000), quota2Tp(5000), quota2Tp(6000), quota2Tp(7000), quota2Tp(8000), quota2Tp(9000), quota2Tp(10000), quota2Tp(11000), quota2Tp(12000), quota2Tp(13000), quota2Tp(14000), quota2Tp(15000), quota2Tp(16000)];
+       //console.log(label);
+
+    
+
+    var yAxis = d3.svg.axis()
+    .scale(y)
+    .orient("left")
+    //.ticks(hmax-hmin);//16
+     
+    yAxis.ticks(0);
+       
+    drawIsometricsLabels(IsoSwap);
+
+    if (Forecast){
+    	removeForecast();
+    	previsioni(tPrevisione,0.4);
+        previsioni(tPrevisione,0.7);
+        previsioni(tPrevisione,1);
+    }
+    
+  
+    
+
+       svg.append("g")
+    .attr("class", "x axis")
+    .attr("transform", "translate(0," +height+ ")")
+    .call(xAxis)
+    .append("text")
+      .attr("x", 600)
+      .attr("y", 15)
+      .attr("dy", "30px")
+      .style("text-anchor", "end")
+      .text("Temperature "+String.fromCharCode(176)+"C");
+      
+       svg.append("line").attr("x1",width).attr("x2",width)
+    .attr("id", "assePres")
+    .attr("y1",y(0)).attr("y2",-8)
+    .attr("stroke","#010101")
+    .attr("stroke-opacity", 1)
+    .attr("stroke-width", .8);
+
+
+       drawIsobarsLabels(IsoSwap);
+       drawLabelTalte("black");
+       drawLabelTbasse("black");
+       drawSkewT();
+       
+
+
+       var lineFunction = d3.svg.line()
+                     .x(function(d){ return x(d.TEMP + 5*(d.HGHT));})
+                     .y(function(d){ return y(d.HGHT);})
+                     .interpolate("linear");
+             
+       var lineFunction2 = d3.svg.line()
+                     .x(function(d){ return x(d.DWPT + 5*(d.HGHT));})
+                     .y(function(d){ return y(d.HGHT);})
+                     .interpolate("linear");
+             
+       lineAdiabatica = d3.svg.line()
+                    .x(function(d){ return x(d.temp);})    
+                     .y(function(d){ return y(d.altezza);})
+                     .interpolate("linear");
+             
+       lineAdiabaticaT = d3.svg.line()
+                     .interpolate("basis")
+                     .x(function(d){ return x(trueTemperat(d));})
+                     .y(function(d){ return y(d.altezza);});
+             
+    drawBordo();
+    svg.append("path")
+   .attr("class","curva_stato")
+   .attr("d", lineFunction(dati)) //Curva di stato
+   .attr("stroke", "red")
+   .attr("stroke-width", 2)
+   .attr("fill", "none")
+   .attr("clip-path", "url(#plot-region)");  
+    drawState();
+	
+	if (! Curves_stato){
+		svg.selectAll(".curva_stato").remove()}
+
+    svg.append("path")
+   .attr("class","curva_rugiada")
+   .attr("d", lineFunction2(dati)) // Curva di rugiada
+   .attr("stroke", "blue")
+   .attr("stroke-width", 2)
+   //.attr("stroke-dasharray", "5,5,5,5")
+   .attr("fill", "none")
+   .attr("clip-path", "url(#plot-region)");
+
+    drawDewPoint();
+	
+		if (! Curves_rugiada){
+		svg.selectAll(".curva_rugiada").remove()}
+
+    d3.select(frm3).on("click", function(){ drawSkewT();});
+
+
+    d3.select(frm2).on("change", function(){
+    var i= frm2.local.selectedIndex;
+    //console.log("Toccata localita",G_pasted);
+    G_pasted=false;
+
+    
+    localita = frm2.local[i].text;
+    //console.log("id: "+localita);
+    var date= new Date();
+    var giorno= date.getDate();
+    var mese= date.getMonth()+1;
+    var anno= date.getYear();
+    if (anno < 1900) anno = anno+1900;
+    var ora;
+    if (date.getHours()>= 00 && date.getHours()< 12) ora= 00;
+    else ora= 12;
+    for (i in map){
+        if(map[i].loc === localita){
+            idLoc= map[i].id;
+            //console.log("idLoc: "+idLoc);
+            break;
+        }
+    }
+    var stringaInput= ""+anno+""+mese+""+giorno+""+ora+""+""+idLoc+""; 
+    //document.getElementById("info").innerHTML= "Local data: "+localita.toUpperCase()+ " :";//+Date();
+    //console.log(stringaInput);
+    //console.log(localita);
+    
+    //var oraSond= document.getElementById("oraSondag");
+   
+    actualState= inputGlobalData;
+    actualMetaState= inputGlobalMetaData;
+    year= actualState.substring(0,4);
+    month= actualState.substring(4,6);
+    day= actualState.substring(6,8);
+    hour= actualState.substring(8,10);
+    actualMetaState= year+month+day+hour+idLoc+"meta.csv";
+    inputData= year+month+day+hour+idLoc+".csv";//actualState;
+    inputMetaData= actualMetaState;
+    drawGraph(gran, hmax, hmin, tmax, tmin, inputData);
+    drawMetaGraph(inputMetaData);
+    //oraSond.innerHTML= "Soundingso relativo a: "+day+"/ "+month+"/ "+year+"   "+hour+"Z";
+});
+
+var oraSond= document.getElementById("oraSondag");
+actualState= inputData;
+year= actualState.substring(0,4);
+month= actualState.substring(4,6);
+day= actualState.substring(6,8);
+hour= actualState.substring(8,10);
+
+
+oraSond.innerHTML= idLoc+" "+localita+" Observations at "+day+"/ "+month+"/ "+year+"   "+hour+"Z";
+
+if (G_pasted)
+       oraSond.innerHTML= Gintestazione;
+       
+       
+//console.log(Curves_adiabatichesecche,Curves_adiabatichesature,Curves_isoigrometriche,Axes_guides,Curves_isometriche,Curves_isobare);
+
+if (Cin)
+       drawCin();
+if (Curves_adiabatichesecche)
+       drawAdSecca();
+if (Curves_adiabatichesature)
+       drawAdSatura();
+if (Curves_isoigrometriche)
+       drawIsoigrom2();
+//if (Axes_guides)
+       //drawTropopause();
+if (Curves_isometriche)
+       drawIsometrics();
+if (Curves_isobare){
+       //drawQuoteIsobars();
+       drawIsobars();
+       }
+if (Curves_labelmix)
+       drawLabelMix("green");
+});
+}
+
+function drawMetaGraph(inputMetaData){
+    inputGlobalMetaData= inputMetaData;
+    metadati= new Array();
+    d3.select("#areaWeather").remove();
+    d3.csv('radios/'+inputMetaData, function(data){
+           
+           if (debug) console.log("drawMeta   data ",data);
+           if (debug) console.log("drawMeta Gmdata",Gmdata);
+
+           if (G_pasted){
+           for (i in Gmdata)
+           i=i;
+                data[i].valore=Gmdata[i].valore;
+           }
+           
+           if (debug)console.log("draw Metagraph Metadata",data);
+           if (debug)console.log("draw Metagraph Gmdata",Gmdata);
+           var newOgg= data[0];
+           newOgg.KIND= parseFloat(newOgg.KIND);
+           newOgg.CAPE= parseFloat(newOgg.CAPE);
+           newOgg.SHIND= parseFloat(newOgg.SHIND);
+           newOgg.LIFTIND= parseFloat(newOgg.LIFTIND);
+           newOgg.TTIND= parseFloat(newOgg.TTIND);
+           newOgg.PRECWATER= parseFloat(newOgg.PRECWATER);
+           metadati.push(newOgg);//d3.entries(newOgg)
+           
+           var array= d3.entries(data[0]);
+           //console.log("inputMetaData: "+inputMetaData);
+           //console.log(array);
+           var w = 500,
+           h = 180,
+           xheight = 130;
+           
+           //var formatPercent = d3.format(".0%");
+           
+           var weat= document.getElementById("weather");
+           var commento= document.getElementById("commento");
+           var svg2 = d3.select(weat)
+           .append("svg")
+           .attr("id", "areaWeather")
+           .attr("width", w)
+           .attr("height", h);
+           
+           var g = svg2.append("g");
+           
+           assex = d3.scale.ordinal()
+           .domain([0, 1, 2, 3])
+           .rangePoints([margine,420]);//100, 450
+           /*
+            var xAx = d3.svg.axis()
+            .scale(assex)
+            .orient("bottom")
+            .tickFormat(formatPercent);//.ticks(7)*/
+           
+           var xAx = d3.svg.axis()
+           .scale(assex)
+           .orient("bottom")
+           .ticks(4);
+           
+           g.attr("class", "x axis")
+           .attr("transform", "translate(0,"+ xheight +")")
+           .call(xAx)
+           .append("text")
+           .attr("x", 270)
+           .attr("y", 30)
+           .attr("dy", ".71em")
+           .style("text-anchor", "end")
+           .text("Level of Instability");
+           
+           svg2.append("rect")
+           .attr("x", assex(0))//100
+           .attr("y", xheight-105)
+           .attr("width", function(){       //assex((metadati[0].LIFTIND)/1000)
+                 var liftInd= metadati[0].LIFTIND;
+                 //console.log("liftInd "+liftInd);
+                 if ( liftInd > 2) return assex(0)-margine+10;
+                 else if (liftInd > -2 && liftInd <= 2) return assex(1)-margine;
+                 else if (liftInd > -6 && liftInd <= -2) return assex(2)-margine;
+                 else return assex(3)-margine;
+                 })
+           .attr("height", 20)
+           .attr("fill", "blue")
+           .append("title")
+           .text((metadati[0].LIFTIND));
+           
+           svg2.append("text")
+           .attr("x", 8)
+           .attr("y", xheight-103)
+           .attr("dy", ".71em")
+           .text("LIFTIND")
+           .append("title")
+           .text("Lifted Index");
+           
+           svg2.append("rect")
+           .attr("x", assex(0))
+           .attr("y", xheight-80)
+           .attr("width", function(){       //assex((metadati[0].TTIND)/1000)
+                 var ttInd= metadati[0].TTIND;
+                 //console.log("ttInd "+ttInd);
+                 if (ttInd < 45) return assex(0)-margine+10;
+                 else if (ttInd >= 45 && ttInd < 50) return assex(1)-margine;
+                 else if (ttInd >= 50 && ttInd < 52) return assex(1)-margine;
+                 else if (ttInd >= 52 && ttInd < 55) return assex(2)-margine;//ttIndBased= "ottime probabilit&agrave di temporali";
+                 else return assex(3)-margine;
+                 })
+           .attr("height", 20)
+           .attr("fill", "green")
+           .append("title")
+           .text((metadati[0].TTIND));
+           
+           svg2.append("text")
+           .attr("x", 10)
+           .attr("y", xheight-78)
+           .attr("dy", ".71em")
+           .text("TTIND")
+           .append("title")
+           .text("Total Total Index");
+           
+           svg2.append("rect")
+           .attr("x", assex(0))
+           .attr("y", xheight-55)
+           .attr("width", function(){       //assex((metadati[0].CAPE)/1000))//(metadati[0].CAPE)
+                 var capeInd= metadati[0].CAPE;
+                 //console.log("capeInd "+capeInd);
+                 if (capeInd < 500) return assex(0)-margine+10;
+                 else if (capeInd >= 500 && capeInd < 1000) return assex(1)-margine;
+                 else if (capeInd >= 1000 && capeInd < 2000) return assex(2)-margine;
+                 else return assex(3)-margine;
+                 })
+           .attr("height", 20)
+           .attr("fill", "yellow")
+           .append("title")
+           .text((metadati[0].CAPE));
+           
+           svg2.append("text")
+           .attr("x", 10)
+           .attr("y", xheight-52)
+           .attr("dy", ".71em")
+           .text("CAPE")
+           .append("title")
+           .text("Convective Available Potential Energy");
+           
+           svg2.append("rect")
+           .attr("x", assex(0))
+           .attr("y", xheight-30)//270
+           .attr("width", function(){       //assex((metadati[0].KIND)/1000))
+                 /*
+                  var kInd= metadati[0].KIND;
+                  console.log("kInd "+kInd);
+                  if (kInd < 25) return assex(0);
+                  else if (kInd >= 25 && kInd < 40) return assex(1);
+                  else return assex(2);*/
+                 var precWat= metadati[0].PRECWATER;
+                 if (precWat < 12.7) return assex(0)-margine+10;//0.50*25.4
+                 else if (precWat >= 12.7 && precWat < 31.75) return assex(1)-margine;//(1.25*25.4)
+                 else if (precWat >= 31.75 && precWat < 44.45) return assex(1)-margine;//(1.75*25.4)
+                 else if (precWat >= 44.75 && precWat < 50.8) return assex(2)-margine;//(2*25.4)
+                 else return assex(3)-margine;
+                 })
+           .attr("height", 20)
+           .attr("fill", "orange")
+           .append("title")
+           .text((metadati[0].PRECWATER));
+           
+           svg2.append("text")
+           .attr("x", 10)
+           .attr("y", xheight-27)//273
+           .attr("dy", ".71em")
+           .text("PRECWAT")
+           .append("title")
+           .text("Precipitable Water");
+           
+           commento.innerHTML= "";
+           //console.log(commento.innerHTML);
+           
+           
+           function visualizzaCommento(){
+           var capeBased;
+           var kIndBased;
+           var ttIndBased;
+           var liftIndBased;
+           var precWatInd;
+           
+           //console.log("commento, metadati[0]",metadati[0]);
+           
+           if (metadati[0].CAPE < 500) capeBased= "Scarsa possibilit&agrave di temporali";
+           else if (metadati[0].CAPE >= 500 && metadati[0].CAPE < 1000) capeBased= "Probabilit&agrave di isolati temporali";
+           else if (metadati[0].CAPE >= 1000 && metadati[0].CAPE < 2000) capeBased= "Buona probabilit&agrave di temporali";
+           else capeBased= "Probabilit&agrave elevata di temporali";
+           //console.log(metadati[0].CAPE);
+           
+           if (metadati[0].KIND < 25) kIndBased= "Scarsa probabilit&agrave di temporali";
+           else if (metadati[0].KIND >= 25 && metadati[0].KIND < 40) kIndBased= "Discrete probabilit&agrave di temporali";
+           else kIndBased= "Forti probabilit&agrave di temporali";
+           //console.log(metadati[0].KIND);
+           
+           if (metadati[0].TTIND < 45) ttIndBased= "Low possibility of convection";
+           else if (metadati[0].TTIND >= 45 && metadati[0].TTIND < 50) ttIndBased= "Possibility of convection";
+           else if (metadati[0].TTIND >= 50 && metadati[0].TTIND < 52) ttIndBased= "Possibili forti temporali";
+           else if (metadati[0].TTIND >= 52 && metadati[0].TTIND < 55) ttIndBased= "Possibilit&agrave di temporali violenti isolati";//ttIndBased= "ottime probabilit&agrave di temporali";
+           else ttIndBased= "Possibilit&agrave di temporali violenti";
+           //console.log(metadati[0].TTIND);
+           
+           if (metadati[0].LIFTIND > 2) liftIndBased= "Absolute stability";
+           else if (metadati[0].LIFTIND > -2 && metadati[0].LIFTIND <= 2) liftIndBased= "Stabilt&agrave relativa";
+           else if (metadati[0].LIFTIND > -6 && metadati[0].LIFTIND <= -2) liftIndBased= "Moderata instabilit&agrave";
+           //else if (metadati[0].LIFTIND > -6 && metadati[0].LIFTIND <= -2) liftIndBased= "temporali forti possibili";
+           else liftIndBased= "Forte instabilit&agrave";
+           //console.log(metadati[0].LIFTIND);
+           
+           if (metadati[0].PRECWATER < (0.50*25.4)) precWatInd= "Quantit&agrave di vapor acqueo molto bassa";
+           else if (metadati[0].PRECWATER >= (0.50*25.4) && metadati[0].PRECWATER < (1.25*25.4)) precWatInd= "Low quantity of vapor";
+           else if (metadati[0].PRECWATER >= (1.25*25.4) && metadati[0].PRECWATER < (1.75*25.4)) precWatInd= "Quantit&agrave di vapor acqueo media";
+           else if (metadati[0].PRECWATER >= (1.75*25.4) && metadati[0].PRECWATER < (2*25.4)) precWatInd= "Quantit&agrave di vapor acqueo alta";//ttIndBased= "ottime probabilit&agrave di temporali";
+           else precWatInd= "Quantit&agrave di vapor acqueo molto alta";
+           //console.log("precWater: "+metadati[0].PRECWATER);
+           //console.log(array[25]);
+           commento.innerHTML= "TTIND-based : "+ttIndBased+"\nLIFTIND-based : "+liftIndBased+"\nPRECWATER-based : "+precWatInd; //"CAPE-based : "+capeBased+ "\n
+           }
+           
+           //console.log("chiamo visualizzza commento");
+           visualizzaCommento();
+           //console.log(array[0].value);
+           /*if (G_pasted){
+           console.log("G_pasted dentro draw meta graph",G_pasted);
+           for (var i=0; i<Ginformazioni.length;++i){
+           console.log("dentro ciclo"+array[i].value,i,Ginformazioni[i]);
+                    array[i].value=Ginformazioni[i];
+                }
+           }
+           console.log("G_pasted dentro draw meta graph",G_pasted);
+            */
+
+           
+           var info1= document.getElementById("informazioni1");
+           var info2= document.getElementById("informazioni2");
+           
+           var SID= "Station identifier: "+ array[0].value;//+"                                 "+ "  Totals totals index: "+ array[13].value;
+           var SNUM= "Station number: "+ array[1].value;//+"
+           var OBST= "Observation time: "+ array[2].value;//+"                            "+"  CAPE using virtual temperature: "+ array[15].value;
+           var SLAT= "Station latitude: "+ array[3].value;//+"                                  "+"  Convective Inhibition: "+ array[16].value;
+           var SLON= "Station longitude: "+ array[4].value;//+"                                 "+"  CINS using virtual temperature:: "+ array[17].value;
+           var SELEV= "Station elevation: "+ array[5].value;//+"                                  "+"  Bulk Richardson Number: "+ array[18].value;
+           var SHIND= "Showalter index: "+ array[6].value;//+"
+           var LIFTIND= "Lifted index: "+ array[7].value;//+"
+           var LIFTVIRT= "LIFT computed using virtual temperature: "+ array[8].value;//+"
+           var SWTIND= "SWEAT index: "+ array[9].value;//+"
+           var KIND= "K index: "+ array[10].value;//+"                                             "+"  Mean mixed layer mixing ratio: "+ array[23].value;
+           var CROSSIND= "Cross totals index: "+ array[11].value;//+"                                "+"  1000 hPa to 500 hPa thickness: "+ array[24].value;
+           var VERTIND= "Vertical totals index: "+ array[12].value;//+"
+           var TTIND= "Totals totals index: "+ array[13].value;
+           var CAPE= "Convective Available Potential Energy: "+ array[14].value;
+           var CAPETEMP= "CAPE using virtual temperature: "+ array[15].value;
+           var CI= "Convective Inhibition: "+ array[16].value;
+           var CINSTEMP= "CINS using virtual temperature: "+ array[17].value;
+           var BRNUM= "Bulk Richardson Number: "+ array[18].value;
+           var BRCAPV= "Bulk Richardson Number using CAPV: "+ array[19].value;
+           var TEMPK= "Temp[K] of the Lifted Condensation Level (LCL): "+ array[20].value;
+           var PRESSHPA= "Pres[hPa] of the Lifted Condensation Level (LCL):"+ array[21].value;
+           var MEANTEMP= "Mean mixed layer potential temperature: "+ array[22].value;
+           var MEANRATIO= "Mean mixed layer mixing ratio: "+ array[23].value;
+           var THICK= "1000 hPa to 500 hPa thickness: "+ array[24].value;
+           var PRECWATER= "Precipitable water[mm] for entire sounding: "+ array[25].value;
+           
+           //console.log("Cambio in ",G_pasted);
+           if (G_pasted){
+            SID= "Station identifier: "+ Ginformazioni[0];
+           //console.log("Cambio in ",Ginformazioni[0]);
+           SNUM= "Station number: "+ Ginformazioni[1];//+"
+           OBST= "Observation time: "+ Ginformazioni[2];//+"                            "+"  CAPE using virtual temperature: "+ array[15].value;
+           SLAT= "Station latitude: "+ Ginformazioni[3];//+"                                  "+"  Convective Inhibition: "+ array[16].value;
+           SLON= "Station longitude: "+ Ginformazioni[4];//+"                                 "+"  CINS using virtual temperature:: "+ array[17].value;
+           SELEV= "Station elevation: "+ Ginformazioni[5];//+"                                  "+"  Bulk Richardson Number: "+ array[18].value;
+           SHIND= "Showalter index: "+ Ginformazioni[6];//+"                                    "+"  Bulk Richardson Number using CAPV: "+ array[19].value;
+           LIFTIND= "Lifted index: "+ Ginformazioni[7];//+"
+           LIFTVIRT= "LIFT computed using virtual temperature: "+ Ginformazioni[8];//+"
+           SWTIND= "SWEAT index: "+ Ginformazioni[9];//+"
+           KIND= "K index: "+ Ginformazioni[10];//+"                                             "+"  Mean mixed layer mixing ratio: "+ array[23].value;
+           CROSSIND= "Cross totals index: "+ Ginformazioni[11];//+"                                "+"  1000 hPa to 500 hPa thickness: "+ array[24].value;
+           VERTIND= "Vertical totals index: "+ Ginformazioni[12];//+"
+           TTIND= "Totals totals index: "+ Ginformazioni[13];
+           CAPE= "Convective Available Potential Energy: "+ Ginformazioni[14];
+           CAPETEMP= "CAPE using virtual temperature: "+ Ginformazioni[15];
+           CI= "Convective Inhibition: "+ Ginformazioni[16];
+           CINSTEMP= "CINS using virtual temperature: "+ Ginformazioni[17];
+           BRNUM= "Bulk Richardson Number: "+ Ginformazioni[18];
+           BRCAPV= "Bulk Richardson Number using CAPV: "+ Ginformazioni[19];
+           TEMPK= "Temp[K] of the the Lifted Condensation Level (LCL): "+ Ginformazioni[20];
+           PRESSHPA= "Pres[hPa] of the the Lifted Condensation Level(LCL): "+ Ginformazioni[21];
+           MEANTEMP= "Mean mixed layer potential temperature: "+ Ginformazioni[22];
+           MEANRATIO= "Mean mixed layer mixing ratio: "+ Ginformazioni[23];
+           THICK= "1000 hPa to 500 hPa thickness: "+ Ginformazioni[24];
+           PRECWATER= "Precipitable water[mm] for entire sounding: "+ Ginformazioni[25];
+           }
+           
+           
+           
+           //console.log(array);
+           //var stringaInfo= ""+SID+"\n"+SNUM+"\n"+OBST+"\n"+SLAT+"\n"+SLON+"\n"+SELEV+"\n"+SHIND+"\n"+LIFTIND+"\n"+LIFTVIRT+"\n"+SWTIND+"\n"+KIND+"\n"+CROSSIND+"\n"+VERTIND+"\n"+TTIND+"\n"+CAPE+"\n"+CAPETEMP+"\n"+CI+"\n"+CINSTEMP+"\n"+BRNUM+"\n"+BRCAPV+"\n"+TEMPK+"\n"+PRESSHPA+"\n"+MEANTEMP+"\n"+MEANRATIO+"\n"+THICK+"\n"+PRECWATER+"";
+           var stringaInfo1= ""+SID+"\n"+SNUM+"\n"+OBST+"\n"+SLAT+"\n"+SLON+"\n"+SELEV+"\n"+SHIND+"\n"+LIFTIND+"\n"+LIFTVIRT+"\n"+SWTIND+"\n"+KIND+"\n"+CROSSIND+"\n"+VERTIND+"\n";
+           var stringaInfo2= ""+TTIND+"\n"+CAPE+"\n"+CAPETEMP+"\n"+CI+"\n"+CINSTEMP+"\n"+BRNUM+"\n"+BRCAPV+"\n"+TEMPK+"\n"+PRESSHPA+"\n"+MEANTEMP+"\n"+MEANRATIO+"\n"+THICK+"\n"+PRECWATER+"";
+           info1.innerHTML= ""+stringaInfo1+"";
+           info2.innerHTML= ""+stringaInfo2+"";
+           
+           });
+}
+
+//crea la lista delle temperature da cui partono le isoigrometriche di riferimento
+function creaLista_t(){
+    var lista_qsat= [0.1, 0.2, 0.4, 0.6, 0.8, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7 ,8, 9, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56,  60, 68, 76];
+    //console.log(lista_qsat.length);
+    var lista_t= new Array();
+    for (e in lista_qsat){
+        var td= tD(pressione_base ,lista_qsat[e]);//1013
+        lista_t[e]= td;
+    }
+    //console.log(lista_t[0]);
+    return lista_t;
+}
+
+
+//Funzioni di calcolo ************************
+
+function rH(h){ return Math.round(h*100)/100;}
+function rH1(h){ return Math.round(h*10)/10;}
+function rH0(h){ return Math.round(h*1)/1;}
+function interb_ori(ab,cd){
+    var Mab,Mcd,Qab,Qcd,x0,y0;
+    //ambedue verticali
+    if((ab[2]-ab[0]==0) &&(cd[2]-cd[0]==0))return false;
+    else if((ab[3]-ab[1]==0) &&(cd[3]-cd[1]==0))return false;
+    //orizzontali
+    else{//almeno una non verticale e non orizzontale
+        Mab=(ab[3]-ab[1])/(ab[2]-ab[0]);
+        Mcd=(cd[3]-cd[1])/(cd[2]-cd[0]);
+        if(Mab==Mcd)return false;
+        if(ab[2]-ab[0]==0){// AB verticale
+            x0=ab[0];
+            Qcd=cd[1]-Mcd*cd[0];
+            y0=Mcd*x0+Qcd;
+            if(y0 < Math.max(ab[1],ab[3])&& y0 > Math.min(ab[1],ab[3]))
+            return true;
+            else return false;
+        } else if(cd[2]-cd[0]==0){//CD verticale
+            x0=cd[0];
+            Qab=ab[1]-Mab*ab[0];
+            y0=Mab*x0+Qab;
+            if(y0 < Math.max(cd[1],cd[3])&&y0 > Math.min(cd[1],cd[3]))
+            return true;
+            else return false;
+        }else{
+            Qab=ab[1]-Mab*ab[0];
+            Qcd=cd[1]-Mcd*cd[0];
+            x0=(Qcd-Qab)/(Mab-Mcd);
+            y0=Mab*x0+Qab;
+            //controllo l'appartenenza dell'intersezione ai due segmenti
+            if(Mcd==0)//CD orizzontale
+            if(x0 < Math.max(cd[0],cd[2])&& x0 > Math.min(cd[0],cd[2]))return     true;
+            else return false;
+            else if(x0 < Math.max(ab[0],ab[2])&& x0 > Math.min(ab[0],ab[2]))
+            return true;
+            else return false;
+        }
+    }//fine else - almeno una non verticale e non orizzontale
+}//fine inter_ori
+
+function intern(ab,cd){
+    var Mab,Mcd,Qab,Qcd,x0,y0;
+    
+    function interno(){
+        return (x0 <= Math.max(ab[0],ab[2]) && x0 >= Math.min(ab[0],ab[2])&&
+                x0 <= Math.max(cd[0],cd[2]) && x0 >= Math.min(cd[0],cd[2])&&
+                y0 <= Math.max(ab[1],ab[3]) && y0 >= Math.min(ab[1],ab[3])&&
+                y0 <= Math.max(cd[1],cd[3]) && y0 >= Math.min(cd[1],cd[3]));}
+    
+    if((ab[2]-ab[0]==0) &&(cd[2]-cd[0]==0))return false; //ambedue verticali
+    if((ab[3]-ab[1]==0) &&(cd[3]-cd[1]==0))return false; //ambedue orizzontali
+    
+    //almeno una non verticale e non orizzontale
+    Mab=(ab[3]-ab[1])/(ab[2]-ab[0]);
+    Mcd=(cd[3]-cd[1])/(cd[2]-cd[0]);
+    
+    if(Mab==Mcd)return false;
+    
+    if(ab[2]-ab[0]==0){// AB verticale
+        x0=ab[0];
+        Qcd=cd[1]-Mcd*cd[0];
+        y0=Mcd*x0+Qcd;
+        if(interno()) return [x0,y0]; else return false;
+    }
+    else if(cd[2]-cd[0]==0){//CD verticale
+        x0=cd[0];
+        Qab=ab[1]-Mab*ab[0];
+        y0=Mab*x0+Qab;
+        if(interno()) return [x0,y0]; else return false;
+    }
+    else{
+        Qab=ab[1]-Mab*ab[0];
+        Qcd=cd[1]-Mcd*cd[0];
+        x0=(Qcd-Qab)/(Mab-Mcd);
+        y0=Mab*x0+Qab;
+        
+        //controllo l'appartenenza dell'intersezione ai due segmenti
+        if(Mcd==0)//CD orizzontale
+        if(interno())return [x0,y0]; else return false;
+        else if(interno())
+                return [x0,y0];
+             else return false;
+    }
+}//fine intern
+
+function interb(ab,cd){
+    var Mab,Mcd,Qab,Qcd,x0,y0;
+    
+    function interno(){
+        return (x0 <= Math.max(ab[0],ab[2]) && x0 >= Math.min(ab[0],ab[2])&&
+                x0 <= Math.max(cd[0],cd[2]) && x0 >= Math.min(cd[0],cd[2])&&
+                y0 <= Math.max(ab[1],ab[3]) && y0 >= Math.min(ab[1],ab[3])&&
+                y0 <= Math.max(cd[1],cd[3]) && y0 >= Math.min(cd[1],cd[3]));}
+    
+    if((ab[2]-ab[0]==0) &&(cd[2]-cd[0]==0))return false; //ambedue verticali
+    if((ab[3]-ab[1]==0) &&(cd[3]-cd[1]==0))return false; //ambedue orizzontali
+    
+    //almeno una non verticale e non orizzontale
+    Mab=(ab[3]-ab[1])/(ab[2]-ab[0]);
+    Mcd=(cd[3]-cd[1])/(cd[2]-cd[0]);
+    
+    if(Mab==Mcd)return false;
+    
+    if(ab[2]-ab[0]==0){// AB verticale
+        x0=ab[0];
+        Qcd=cd[1]-Mcd*cd[0];
+        y0=Mcd*x0+Qcd;
+        if(interno()) return true; else return false;
+    }
+    else if(cd[2]-cd[0]==0){//CD verticale
+        x0=cd[0];
+        Qab=ab[1]-Mab*ab[0];
+        y0=Mab*x0+Qab;
+        if(interno()) return true; else return false;
+    }
+    else{
+        Qab=ab[1]-Mab*ab[0];
+        Qcd=cd[1]-Mcd*cd[0];
+        x0=(Qcd-Qab)/(Mab-Mcd);
+        y0=Mab*x0+Qab;
+        
+        //controllo l'appartenenza dell'intersezione ai due segmenti
+        if(Mcd==0)//CD orizzontale
+        if(interno())return true; else return false;
+        else if(interno())
+                return true;
+             else return false;
+    }
+}//fine interb
+
+
+
+function testInter(){
+        // [ -47.6, 10.3, -50.07, 10.55 ] Array [ -55.9, 13.59, -56, 13.63 ] Array [ -47.700406504065135, 10.310162601626025 ]
+    
+    ax=-10;
+    ay=2;
+    bx=-20;
+    by=3;
+      
+    cx=-25;
+    cy=3;
+    dx=20;
+    dy=1;
+    
+    pax=Math.round(x(ax+5*ay));
+    pay=Math.round(y(ay));
+    pbx=Math.round(x(bx+5*by));
+    pby=Math.round(y(by));
+    
+    
+    pcx=Math.round(x(cx+5*cy));
+    pcy=Math.round(y(cy));
+    pdx=Math.round(x(dx+5*dy));
+    pdy=Math.round(y(dy));
+    
+    
+    svg.append("line")
+    .attr("class","P1")
+    .attr("x1", pax).attr("y1", pay)
+    .attr("x2", pbx).attr("y2", pby)
+    .attr("stroke", "red")
+    .attr("stroke-width", 3)
+    .style("opacity", 1)
+    .attr("clip-path", "url(#plot-region)");
+    
+    svg.append("line")
+    .attr("class","P1")
+    .attr("x1", pcx).attr("y1", pcy)
+    .attr("x2", pdx).attr("y2", pdy)
+    .attr("stroke", "green")
+    .attr("stroke-width", 6)
+    .style("opacity", 1)
+    
+    if (interb([ax,ay,bx,by],[cx,cy,dx,dy])){
+                var p=intern([ax,ay,bx,by],[cx,cy,dx,dy]);
+                //console.log("TEST TRUE interb [ax,ay,bx,by],[cx,cy,dx,dy]: " ,sa,sb,[ax,ay,bx,by],[cx,cy,dx,dy],p,interd([ax,ay,bx,by],[cx,cy,dx,dy]));
+
+
+        svg.append("circle")
+        .attr("class","P1")
+        .attr("id", "p2")
+        .attr("cx", x(p[0]+5*p[1]))
+        .attr("cy", y(p[1]))
+        .attr("r", 3.5)
+        .each(linkTooltip);       
+    }
+        else{
+            //console.log("TEST FALSE interb [ax,ay,bx,by],[cx,cy,dx,dy]: " ,sa,sb,[ax,ay,bx,by],[cx,cy,dx,dy],interd([ax,ay,bx,by],[cx,cy,dx,dy]));
+        }
+return;
+    }
+
+function trueAltitudine(p){ //cerca nel radio sondaggio la riga corrispondente alla pressione p più vicina e rstituisce la Quota di quella P
+    var minimo=1000;
+    var minimo_i=0;
+    for (i in dati){
+        var diff=Math.abs(dati[i].PRES-p);
+        if (diff<minimo){
+            minimo=diff;
+            minimo_i=i;
+        }
+    }
+    return dati[minimo_i].THGHT;
+}
+
+//calcola il mix del punto sulla curva di DewPoint situato in corrispondenza dell'isobara relativa al punto cliccato
+function interpolatedMix(arrayDatiDewPoint, pressione){
+    //mancano da gestire i casi particolari
+    var minMix= 0;
+    var maxMix= 0;
+    var debug=false;
+    //if (pressione==1013.25) return arrayDatiDewPoint[0].MIXR;
+    for (i=arrayDatiDewPoint.length-1; i>= 0;  i--){
+        //console.log("<interpolatedMix>",arrayDatiDewPoint[i].PRES);
+        if(arrayDatiDewPoint[i].PRES === pressione){
+            if (debug) console.log("<interpolatedMix>","PRES===pressione",arrayDatiDewPoint[i].PRES, arrayDatiDewPoint[i].DWPT);
+            return arrayDatiDewPoint[i].MIXR;
+        }
+        else{
+            if(arrayDatiDewPoint[i].PRES > pressione){
+                maxMix= arrayDatiDewPoint[i].MIXR;
+                minMix= arrayDatiDewPoint[i+1].MIXR;
+                if (debug)  console.log("<interpolatedMix>","i PRES e DWPT:",i,arrayDatiDewPoint[i].PRES, arrayDatiDewPoint[i].DWPT, arrayDatiDewPoint[i].MIXR);
+                if (debug) console.log("<interpolatedMix>","i+1 PRES e DWPT",i+1,arrayDatiDewPoint[i+1].PRES, arrayDatiDewPoint[i+1].DWPT,arrayDatiDewPoint[i+1].MIXR);
+                ascisseDewPointNotev[0]= arrayDatiDewPoint[i].TEMP;   //cambiare nomi curva usata in curva di stato
+                ascisseDewPointNotev[1]= arrayDatiDewPoint[i+1].TEMP;
+                var result= (maxMix+ minMix)/2; //valore interpolato
+                if (debug)  console.log("<interpolatedMix maxMix, minMix, result>",maxMix, minMix, result);
+                return result;
+            }
+        }
+    }
+}
+
+
+//calcola il DWPTdel punto sulla curva di DewPoint situato in corrispondenza dell'isobara relativa al punto cliccato
+function interpolatedTDWPT(arrayDatiDewPoint, pressione){
+    //mancano da gestire i casi particolari
+    var minDWPT= 0;
+    var maxDWPT= 0;
+    var debug=false;
+    //if (pressione==1013.25) return arrayDatiDewPoint[0].DWPT;
+    for (i=arrayDatiDewPoint.length-1; i>= 0;  i--){
+        //console.log("<interpolatedMix>",arrayDatiDewPoint[i].PRES);
+        if(arrayDatiDewPoint[i].PRES === pressione){
+            if (debug) console.log("<interpolatedTDWP>","PRES===pressione",arrayDatiDewPoint[i].PRES, arrayDatiDewPoint[i].DWPT);
+            return arrayDatiDewPoint[i].DWPT;
+        }
+        else{
+            if(arrayDatiDewPoint[i].PRES > pressione){
+                maxDWPT= arrayDatiDewPoint[i].DWPT;
+                minDWPT= arrayDatiDewPoint[i+1].DWPT;
+                if (debug)  console.log("<interpolatedTDWPT>","i PRES e DWPT:",i,arrayDatiDewPoint[i].PRES, arrayDatiDewPoint[i].DWPT, arrayDatiDewPoint[i].DWPT);
+                if (debug) console.log("<interpolatedTDWPT>","i+1 PRES e DWPT",i+1,arrayDatiDewPoint[i+1].PRES, arrayDatiDewPoint[i+1].DWPT,arrayDatiDewPoint[i+1].MIXR);
+                ascisseDewPointNotev[0]= arrayDatiDewPoint[i].TEMP;   //cambiare nomi curva usata in curva di stato
+                ascisseDewPointNotev[1]= arrayDatiDewPoint[i+1].TEMP;
+                var result= (maxDWPT+ minDWPT)/2; //valore interpolato
+                if (debug)  console.log("<interpolatedTDWPT maxDWPT, minDWPT, result>",maxDWPT, minDWPT, result);
+                return result;
+            }
+        }
+    }
+}
+
+//calcola la temperatura relativa al mix mixNotev
+function mix2Temp(mixNotev){
+    for (i= 0; i< mix_notevoli.length; i++){
+        if (mix_notevoli[i] === mixNotev){
+            var temp= tD(pressione_base ,mix_notevoli[i]);
+        }
+    }
+    return temp;
+}
+
+//calcola il mix relativo alla temperatura tempNotev
+function temp2Mix(tempNotev){
+    for (i in temp_mix_notev){
+        if (temp_mix_notev[i] === tempNotev){
+            var mix= mix_notevoli[i];
+        }
+    }
+    return mix;
+}
+
+//calcola l'adiabatica satura che parte dal punto di coordinate (tempIniz, altIniz)
+function adiabForClick2(datiCurves, tempIniz, altIniz, notUsedT, q){
+    var debug=false;
+    if (debug3) console.log("<adiabForClick2(datiCurves, tempIniz, altIniz, notUsedT, q)",datiCurves, tempIniz, altIniz, notUsedT, q);
+    var ris22 = adiabSatura3(tempIniz,quota2Tp(altIniz), q,10);
+    if (debug) console.log("ris22",ris22[0]);
+    var segmentia=ris22.length-1;
+    var segmentis=datiCurves.length-1;
+    
+    //console.log("segmenti, ris22",segmentia,ris22);
+    //console.log("segmenti, daticurve",segmentis,datiCurves);
+    var arrayAdiab= new Array();   
+    var segmentoa=0;
+    var segmentos=0;
+    var cross=0;
+    var incrocio=[]
+    var sa=0,sb=0,sbmin=0;
+    var ax,ay,bx,by,cx,cy,dx,dy;
+    var pax,pay,pbx,pby,pcx,pcy,pdx,pdy;
+    var p=[0,0];
+    
+    function testInter(){
+        // [ -47.6, 10.3, -50.07, 10.55 ] Array [ -55.9, 13.59, -56, 13.63 ] Array [ -47.700406504065135, 10.310162601626025 ]
+    
+    ax=-10;
+    ay=2;
+    bx=-20;
+    by=3;
+      
+    cx=-25;
+    cy=3;
+    dx=20;
+    dy=1;
+    
+    pax=Math.round(x(ax+5*ay));
+    pay=Math.round(y(ay));
+    pbx=Math.round(x(bx+5*by));
+    pby=Math.round(y(by));
+    
+    
+    pcx=Math.round(x(cx+5*cy));
+    pcy=Math.round(y(cy));
+    pdx=Math.round(x(dx+5*dy));
+    pdy=Math.round(y(dy));
+    
+    
+    svg.append("line")
+    .attr("class","P1")
+    .attr("x1", pax).attr("y1", pay)
+    .attr("x2", pbx).attr("y2", pby)
+    .attr("stroke", "red")
+    .attr("stroke-width", 3)
+    .style("opacity", 1)
+    .attr("clip-path", "url(#plot-region)");
+    
+    svg.append("line")
+    .attr("class","P1")
+    .attr("x1", pcx).attr("y1", pcy)
+    .attr("x2", pdx).attr("y2", pdy)
+    .attr("stroke", "green")
+    .attr("stroke-width", 6)
+    .style("opacity", 1)
+    
+    if (interb([ax,ay,bx,by],[cx,cy,dx,dy])){
+                var p=intern([ax,ay,bx,by],[cx,cy,dx,dy]);
+                //console.log("TEST TRUE interb [ax,ay,bx,by],[cx,cy,dx,dy]: " ,sa,sb,[ax,ay,bx,by],[cx,cy,dx,dy],p,interd([ax,ay,bx,by],[cx,cy,dx,dy]));
+
+
+        svg.append("circle")
+        .attr("class","P1")
+        .attr("id", "p2")
+        .attr("cx", x(p[0]+5*p[1]))
+        .attr("cy", y(p[1]))
+        .attr("r", 3.5)
+        .each(linkTooltip);       
+    }
+        else{
+            //console.log("TEST FALSE interb [ax,ay,bx,by],[cx,cy,dx,dy]: " ,sa,sb,[ax,ay,bx,by],[cx,cy,dx,dy],interd([ax,ay,bx,by],[cx,cy,dx,dy]));
+        }
+return;
+    }
+    
+    function show(){
+        svg.selectAll(".P1").remove();
+        
+        svg.append("circle")
+        .attr("class","P1")
+        .attr("id", "p2")
+        .attr("cx", x(p[0]+5*p[1]))
+        .attr("cy", y(p[1]))
+        .attr("r", 3.5)
+        .each(linkTooltip);
+        console.log("TRUE interb [ax,ay,bx,by],[cx,cy,dx,dy]: " ,[ax,ay,bx,by],[cx,cy,dx,dy]);
+        
+        svg.append("line")
+        .attr("class","P1")
+        .attr("x1", pax).attr("y1", pay)
+        .attr("x2", pbx).attr("y2", pby)
+        .attr("stroke", "green")
+        .attr("stroke-width", 4)
+        .attr("clip-path", "url(#plot-region)");
+        
+        svg.append("line")
+        .attr("class","P1")
+        .attr("x1", pcx).attr("y1", pcy)
+        .attr("x2", pdx).attr("y2", pdy)
+        .attr("stroke", "green")
+        .attr("stroke-width", 4)
+        .attr("clip-path", "url(#plot-region)");
+
+
+    }
+    
+    function punti(round){
+
+        ax=ris22[sa].temp;
+        ay=ris22[sa].altezza;
+        bx=ris22[sa+1].temp;
+        by=ris22[sa+1].altezza;
+        
+        pax=Math.round(x(ax+5*ay));
+        pay=Math.round(y(ay));
+        pbx=Math.round(x(bx+5*by));
+        pby=Math.round(y(by));
+        
+        cx=datiCurves[sb].TEMP;
+        cy=datiCurves[sb].HGHT;
+        dx=datiCurves[sb+1].TEMP;
+        dy=datiCurves[sb+1].HGHT
+              
+        pcx=Math.round(x(cx+5*cy));
+        pcy=Math.round(y(cy));
+        pdx=Math.round(x(dx+5*dy));
+        pdy=Math.round(y(dy));
+        
+        if (round){
+            ax=rH(ax);
+            ay=rH(ay)
+            bx=rH(bx);
+            by=rH(by);
+            
+            cx=rH(cx);
+            cy=rH(cy)
+            dx=rH(dx);
+            dy=rH(dy);           
+        }        
+    }
+    
+    //calcola il primo segmento che ha senso considerare
+    for (var i=0;i<datiCurves.length;i++){
+        if (datiCurves[i].HGHT<altIniz)
+        sbmin=i;
+    }
+    if (sbmin>0) sbmin--;
+    
+    if (debug) console.log("adiabForClick2 sbmin:",sbmin);
+
+    for (sa=0;sa<segmentia;sa++)
+      for (sb=sbmin;sb<segmentis;sb++){
+        //console.log("ciclo interno");
+        punti(false);
+        if (interb([ax,ay,bx,by],[cx,cy,dx,dy])){
+            p=intern([ax,ay,bx,by],[cx,cy,dx,dy]);
+            //console.log("TRUE interb [ax,ay,bx,by],[cx,cy,dx,dy] :" ,sa,sb,[ax,ay,bx,by],[cx,cy,dx,dy],p);
+            cross=sa+1;
+            tempState= (datiCurves[sb].TEMP+datiCurves[sb+1].TEMP)/2;
+            ris22[sa+1].temp=p[0];
+            ris22[sa+1].altezza=p[1];
+            for (i=0; i<=cross;i++)
+                arrayAdiab[i]=ris22[i];
+            //console.log("adiabForClick2 cross!,temp",cross,ris22[cross].temp,tempState,arrayAdiab);
+            
+            
+        if (debug) console.log("<adiabForClick2> STOP");
+        return arrayAdiab;
+        }
+    }
+      
+      if (debug) console.log("<adiabForClick2> STOP senza cross! sa e sb:",sa,sb," tempiniz:",tempIniz, "altIniz:",altIniz,"mix:", q);
+      
+      return ris22;
+    }
+
+function adSeccaForClick(datiCurves, tempIniz, altIniz, tempFin, altFin){
+    if (debug) console.log(" adSeccaForClick START");
+    var debug=false;
+    var ris22 = adiabSecca2(tempIniz,altIniz);
+    
+    var arrayAdSec= new Array();
+    var j= 0;
+    var tempState;
+    var sbmin;
+    var segmentia=ris22.length-1;
+    var segmentis=datiCurves.length-1;
+    var segmentoa=0;
+    var segmentos=0;
+    var cross=0;
+    var incrocio=[]
+    var sa=0,sb=0,sbmin=0;
+    var ax,ay,bx,by,cx,cy,dx,dy;
+    var pax,pay,pbx,pby,pcx,pcy,pdx,pdy;
+    var p=[0,0];
+
+
+    
+    //console.log("segmenti, ris22",segmentia,ris22);
+    //console.log("segmenti, daticurve",segmentis,datiCurves);
+
+    
+    
+    function testInter(){
+        // [ -47.6, 10.3, -50.07, 10.55 ] Array [ -55.9, 13.59, -56, 13.63 ] Array [ -47.700406504065135, 10.310162601626025 ]
+        
+        
+        ax=-10;
+        ay=2;
+        bx=-20;
+        by=3;
+        
+        
+        
+        cx=-25;
+        cy=3;
+        dx=20;
+        dy=1;
+        
+        // [ -47.6, 10.3, -50.07, 10.55 ] Array [ -55.9, 13.59, -56, 13.63 ] Array [ -47.700406504065135, 10.310162601626025 ]
+        
+        /*
+         ax=-47.6;
+         ay=10.3;
+         bx=-50.7;
+         by=10.55;
+         
+         
+         
+         cx=-55.9;
+         cy=13.59;
+         dx=-56;
+         dy=13.64;
+         */
+        pax=Math.round(x(ax+5*ay));
+        pay=Math.round(y(ay));
+        pbx=Math.round(x(bx+5*by));
+        pby=Math.round(y(by));
+        
+        
+        pcx=Math.round(x(cx+5*cy));
+        pcy=Math.round(y(cy));
+        pdx=Math.round(x(dx+5*dy));
+        pdy=Math.round(y(dy));
+        
+        
+        svg.append("line")
+        .attr("class","P1")
+        .attr("x1", pax).attr("y1", pay)
+        .attr("x2", pbx).attr("y2", pby)
+        .attr("stroke", "red")
+        .attr("stroke-width", 3)
+        .style("opacity", 1)
+        .attr("clip-path", "url(#plot-region)");
+        
+        svg.append("line")
+        .attr("class","P1")
+        .attr("x1", pcx).attr("y1", pcy)
+        .attr("x2", pdx).attr("y2", pdy)
+        .attr("stroke", "green")
+        .attr("stroke-width", 6)
+        .style("opacity", 1)
+        
+        if (interb([ax,ay,bx,by],[cx,cy,dx,dy])){
+            var p=intern([ax,ay,bx,by],[cx,cy,dx,dy]);
+            console.log("TEST TRUE interb [ax,ay,bx,by],[cx,cy,dx,dy]: " ,sa,sb,[ax,ay,bx,by],[cx,cy,dx,dy],p,interd([ax,ay,bx,by],[cx,cy,dx,dy]));
+            
+            
+            svg.append("circle")
+            .attr("class","P1")
+            .attr("id", "p2")
+            .attr("cx", x(p[0]+5*p[1]))
+            .attr("cy", y(p[1]))
+            .attr("r", 3.5)
+            .each(linkTooltip);
+            
+            
+            
+        }
+        else{
+            console.log("TEST FALSE interb [ax,ay,bx,by],[cx,cy,dx,dy]: " ,sa,sb,[ax,ay,bx,by],[cx,cy,dx,dy],interd([ax,ay,bx,by],[cx,cy,dx,dy]));
+        }
+        
+        
+        return;
+    }
+    
+    function show(){
+        svg.selectAll(".P1").remove();
+        
+        svg.append("circle")
+        .attr("class","P1")
+        .attr("id", "p2")
+        .attr("cx", x(p[0]+5*p[1]))
+        .attr("cy", y(p[1]))
+        .attr("r", 3.5)
+        .each(linkTooltip);
+        console.log("TRUE interb [ax,ay,bx,by],[cx,cy,dx,dy]: " ,[ax,ay,bx,by],[cx,cy,dx,dy]);
+        
+        svg.append("line")
+        .attr("class","P1")
+        .attr("x1", pax).attr("y1", pay)
+        .attr("x2", pbx).attr("y2", pby)
+        .attr("stroke", "green")
+        .attr("stroke-width", 4)
+        .attr("clip-path", "url(#plot-region)");
+        
+        svg.append("line")
+        .attr("class","P1")
+        .attr("x1", pcx).attr("y1", pcy)
+        .attr("x2", pdx).attr("y2", pdy)
+        .attr("stroke", "green")
+        .attr("stroke-width", 4)
+        .attr("clip-path", "url(#plot-region)");        
+    }
+    
+    //calcola il primo segmento che ha senso considerare
+    for (var i=0;i<datiCurves.length;i++){
+        if (datiCurves[i].HGHT<altIniz)
+        sbmin=i;
+    }
+    if (sbmin>0) sbmin--;
+    
+    
+    
+    function punti(round){
+        
+        ax=ris22[sa].temp;
+        ay=ris22[sa].altezza;
+        bx=ris22[sa+1].temp;
+        by=ris22[sa+1].altezza;
+        
+        pax=Math.round(x(ax+5*ay));
+        pay=Math.round(y(ay));
+        pbx=Math.round(x(bx+5*by));
+        pby=Math.round(y(by));
+
+        cx=datiCurves[sb].TEMP;
+        cy=datiCurves[sb].HGHT;
+        dx=datiCurves[sb+1].TEMP;
+        dy=datiCurves[sb+1].HGHT
+        
+        pcx=Math.round(x(cx+5*cy));
+        pcy=Math.round(y(cy));
+        pdx=Math.round(x(dx+5*dy));
+        pdy=Math.round(y(dy));
+        
+        if (round){
+            ax=rH(ax);
+            ay=rH(ay)
+            bx=rH(bx);
+            by=rH(by);
+            
+            cx=rH(cx);
+            cy=rH(cy)
+            dx=rH(dx);
+            dy=rH(dy);
+        }        
+    }
+    
+    for (sa=0;sa<segmentia;sa++)
+    for (sb=sbmin;sb<segmentis;sb++){
+        //console.log("<adSeccaForClick> chiamo punti()");
+        punti(true);
+        //console.log("<adSeccaForClick> chiamato punti()");
+        
+        if (interb([ax,ay,bx,by],[cx,cy,dx,dy])){
+            p=intern([ax,ay,bx,by],[cx,cy,dx,dy]);
+            if (debug) console.log("TRUE interb [ax,ay,bx,by],[cx,cy,dx,dy] :" ,sa,sb,[ax,ay,bx,by],[cx,cy,dx,dy],p);
+            cross=sa+1;
+            tempState= (datiCurves[sb].TEMP+datiCurves[sb+1].TEMP)/2;
+            ris22[sa+1].temp=p[0];
+            ris22[sa+1].altezza=p[1];
+            for (i=0; i<=cross;i++)
+                arrayAdSec[i]=ris22[i];
+            if (debug) console.log("cross!,temp",cross,ris22[cross].temp,tempState,arrayAdSec);
+            
+            
+            if (debug) console.log("<adSeccaForClick> STOP");
+            return arrayAdSec;
+        }
+    }
+    console.log("<adSeccaForClick esco senza cross > STOP");
+    
+    if (false){
+        for (sb=sbmin;sb<segmentis-1;sb++){
+            sa=0;
+            punti(true);
+            console.log("sb:",sb,"cx,cy,dx,dy",cx,cy,dx,dy);
+            if (sb%2==0){
+            svg.append("line")
+            .attr("class","P1")
+            .attr("x1", pcx).attr("y1", pcy)
+            .attr("x2", pdx).attr("y2", pdy)
+            .attr("stroke", "green")
+            .attr("stroke-width", 4)
+            }
+            for (sa=0;sa<segmentia-1;sa++){
+                sb=0;
+                punti(true);
+                console.log("sa:",sb,"ax,ay,bx,by",ax,ay,bx,cy);
+                if (sa%2==0){
+                    svg.append("line")
+                    .attr("class","P1")
+                    .attr("x1", pax).attr("y1", pay)
+                    .attr("x2", pbx).attr("y2", pby)
+                    .attr("stroke", "black")
+                    .attr("stroke-width", 4)
+                }         
+          }
+        }
+    }    
+    return ris22;
+}
+
+function isoigromForClick(tempIniz, tempFin, altFin){
+    //console.log(tempIniz);
+    var ris = isoigromet2(tempIniz,0);
+    //console.log(ris2);
+    var arrayIso= new Array();
+    var j= 0;
+    for (i in ris){
+        if (ris[i].altezza<= altFin){
+            arrayIso[j]= ris[i];
+            j++;
+        }
+    }
+    var endPoint= new Object();
+    endPoint.temp = tempFin;
+    endPoint.altezza= altFin;
+    arrayIso[j]= endPoint;
+    return arrayIso;
+}
+
+//restituisce il reale valore della temperatura del punto di coordinate in dataTemp
+function trueTemperat(dataTemp){ 
+    var pixY= (height-y(dataTemp.altezza));
+    //console.log("pixY: "+pixY);
+    var pixBaseX= x(dataTemp.temp);
+    //console.log("pixBaseX: "+ pixBaseX);
+    var pixTot= pixBaseX+ pixY;
+    //console.log("pixTot: "+ pixTot);
+    var trueTemp= x.invert(pixTot);
+    //console.log("trueTemp: "+ trueTemp);
+    //console.log("x(trueTemp): "+ x(trueTemp));
+    return trueTemp;
+}
+
+//restituisce il valore di temperatura relativa al punto di coordinate in px (tempPx, altPx)
+function tempValue(tempPx, altPx){
+    var trueTempPx= (tempPx-margin.left)- (height+margin.top-altPx);//  
+    //console.log("trueTempPx: "+trueTempPx);
+    var trueTemp= x.invert(trueTempPx);
+    return trueTemp;
+}
+
+//jQuery è al netto dei margini del disegno e quindi non vengono inclusi nel calcolo
+function tempValueJquery(tempPx, altPx){
+    //console.log("<jQuery START>",(tempPx), (height-altPx));
+    var trueTempPx= (tempPx)- (height-altPx);//  
+    //console.log("<jQuery trueTempPx: "+trueTempPx);
+    var trueTemp= x.invert(trueTempPx);
+    //console.log("<jQuery inverted trueTempPx: "+trueTempPx);
+    // console.log("<jQuery STOP>");
+    return trueTemp;
+}
+
+//restituisce l'array con le coordinate dei punti dell'adiabatica secca che parte da TempStart
+function adiabSecca(TempStart,P){
+    var altMax= 0;
+    var result= new Array(hmax*10+1);
+    var tempActual= TempStart;
+    for (index= 0; index< result.length; index++){
+        var altActual= (index*100)/1000;
+        tempActual= TempStart-(index* 0.976);
+        if (tempActual < eval(3*tmin)){
+            tempActual= eval(3*tmin);
+            altActual= altMax;
+        }
+        else altMax= altActual;
+        
+        var ogg= new Object();
+        ogg.temp= tempActual;
+        ogg.altezza= altActual;
+        result[index]= ogg;
+    }
+    return result;
+}
+
+function adiabSecca2(TempStart,altStart){
+    var debug=false;
+    if (debug) console.log('adiabSecca2(TempStart,altStart)',TempStart,altStart);
+    var lungh= Math.round((hmax-altStart)*10+1);
+    var result= new Array(lungh);
+    var tempActual= TempStart;
+    for (index= 0; index< result.length; index++){
+        var altActual= altStart+(index*100)/1000;
+        tempActual= TempStart-(index* 0.976);
+        var ogg= new Object();
+        ogg.temp= tempActual;
+        ogg.altezza= altActual;
+        result[index]= ogg;
+    }
+    return result;
+}
+
+
+function tSecca(T0,p0,q0,p1,dp,offset){
+    var debug3=false;
+    if (debug3) console.log('tSecca('+T0+","+p0+","+q0+","+p1+","+dp+","+offset+")"); 
+    q0=0.01;
+    var result=[];
+    var Kel=273.15;
+    var deltaT = 0.001; 
+    var deltaT = 0.1;                 // differenza per essere in condensazione
+    var deltap = dp;                  // incremento grossolano di livello in hPa  corrisponde a una variazione di 1C a 900hPa
+    var Td0 = IterTd(T0, p0, q0);     // in Celsius
+    var Tk0 = T0 + Kel;     // in Kelvin
+    var qk0 = q0/1000.0;    // in kg/kg
+    var Theta0 = ThetaMoist(Tk0, p0, q0);   // in Kelvin
+    if (Td0 < (T0 - deltaT)) {
+        p = p0; // hPa
+        T = T0; // C
+        Td = Td0; // C      
+        esp = 0.2854;   // Dry adiabat //esp = (Ra + Rv * qk0) / (Cp_a + Cp_v * qk0); // Moist adiabat
+        while (p>p1) {
+            p = p - deltap;
+            deltap+=offset;
+            T = Theta0 * Math.pow(p / 1000.0, esp) - Kel; // in C
+            Td = IterTd(T, p, q0); //in C
+            //if ((T-Td) < 1) deltap = (T-Td);    // incremento fine di p     
+            //console.log(p1,p,T,p2THGT(p));    
+            var ogg= new Object();
+            ogg.temp= T;
+            ogg.altezza= p2THGT(p)/1000;
+            result.push(ogg);}
+        }    
+        return result;    
+}  
+
+ 
+
+
+//crea i path corrispondenti ad ogni curva delle adiab Secche Beppe
+function drawAdSecca(){ //BEPPE
+    var temp=tmin;
+    while (temp<160){
+        temp= temp+gran;
+        //console.log("temp:"+temp);
+        //console.log('disegno a t=',temp, 'step=', gran);
+        var ris = tSecca(temp,pres0,0,100,10,3);
+        //var ris = tSecca(30,Math.round(quota2Tp(0)),0,500);
+        //var ris = adiabSecca2(30,0);
+        //console.log("rist:",ris);
+        gruppoAdSecca[i]= ris;
+        svg.append("path")
+        .attr("class", "adiabSec")
+        .attr("id", "adSec"+i)
+        .attr("d", lineAdiabaticaT(ris))
+        .attr("stroke", "green")
+        .attr("stroke-dasharray", "5,5,5,5")
+        .attr("stroke-width", function(){
+              if (i%5 === 0) return 1.5;
+              else return 1;
+              })
+              .attr("fill", "none")
+              .attr("opacity", 1)
+              .attr("clip-path", "url(#plot-region)");
+    }
+}
+
+
+
+
+//funzione che utilizza un passo di 100 m
+function adiabSatura(TempStart,P, q0){
+    var debug=true;
+    if (debug) ("adiabSatura START");
+    //var altMax= 0;
+    var altActual= 0;
+    var result= new Array(hmax*10+1);
+    //console.log(result.length);
+    var tempActual= TempStart;
+    
+    for (index= 0; index< result.length; index++){
+        if (index===0)
+            {
+             altActual=0;
+             tempActual=TempStart;
+            }
+        else
+            {
+            altActual= (index*100)/1000;
+            //tempActual= TempStart-(index* 0.6);
+            tempActual= gradienteAdiabaticaSatura(TempStart, quota2p(0), q0, quota2p(altActual*1000));
+            //tempActual= MoistAdiabat(TempStart, quota2p(altActual), 9);
+            //console.log("TA "+tempActual+" tmin "+tmin);
+            //if (tempActual < 4*tmin){
+                //console.log("e diventato minore");
+              //  tempActual= 4*tmin;
+                //altActual= altMax;
+                //console.log(altMax);
+            //}
+            //else{
+              //  altMax= altActual;
+            //}
+            }
+        var ogg= new Object();
+        ogg.temp= tempActual;
+        ogg.altezza= altActual;
+        result[index]= ogg;
+    }
+    return result;
+}
+
+//restituisce l'array con le coordinate dei punti dell'adiabatica satura che parte da TempStart
+//funzione da utilizzare per avere un passo di 10 mbar
+function adiabSatura2(TempStart,P, q0){
+
+    //console.log("wwwwwwwwwwwwww");
+    //var altMax= 0;
+    var debug=false;
+    if (debug) console.log("adiabSatura2 START");
+    var altActual= 0;
+    var presActual;
+    var result= new Array(Math.round((pres0- presMax)/10)+1);//pres0
+    if (debug) console.log("result.length:",result.length);
+    var tempActual= TempStart;
+    
+    for (index= 0; index< result.length; index++){
+        if (index===0)
+            {
+             altActual=0;
+             tempActual=TempStart;
+            }
+        else
+            {
+            presActual= pres0-index*10;
+            //altActual= p2quotaICAO(presActual)/1000;
+            altActual= p2THGT(presActual)/1000;
+            //tempActual= TempStart-(index* 0.6);
+            tempActual= gradienteAdiabaticaSatura(TempStart, quota2Tp(0), q0, presActual);
+            }
+        if (debug) console.log("presActual:",presActual,"altActual:",altActual);
+        var ogg= new Object();
+        ogg.temp= tempActual;
+        ogg.altezza= altActual;
+        result[index]= ogg;
+    }
+    //if (debug) console.log("result:",result);
+    return result;
+}
+
+// function adiabSatura3(TempStart,P, q0){
+//     //var altMax= 0;
+    
+//     var altActual= 0;
+//     var step=10;
+//     var result= new Array(Math.round((P- presMax)/step)+1);//pres0
+//     //console.log(result.length);
+//     var tempActual= TempStart;
+    
+//     for (index= 0; index< result.length; index++){
+//         if (index===0)
+//             {
+//              altActual= p2quotaICAO(P)/1000;
+//              //console.log(altActual);
+//              tempActual=TempStart;
+//             }
+//         else
+//             {
+//             var presActual= P-index*step;
+//             altActual= p2quotaICAO(presActual)/1000;
+//             //tempActual= TempStart-(index* 0.6);
+//             tempActual= gradienteAdiabaticaSatura(TempStart, P, q0, presActual);
+//             }
+//         var ogg= new Object();
+//         ogg.temp= tempActual;
+//         ogg.altezza= altActual;
+//         result[index]= ogg;
+//     }
+//     //console.log(result);
+//     return result;
+// }
+
+function adiabSatura3(TempStart,P, q0,step){
+    //var altMax= 0;
+    
+    var altActual= 0;
+    var result= new Array(Math.round((P- presMax)/step)+1);//pres0
+    //console.log(result.length);
+    var tempActual= TempStart;
+    
+    for (index= 0; index< result.length; index++){
+        if (index===0)
+        {
+            altActual= p2THGT(P)/1000;
+            //console.log(altActual);
+            tempActual=TempStart;
+        }
+        else
+        {
+            var presActual= P-index*step;
+            altActual= p2THGT(presActual)/1000;
+            //tempActual= TempStart-(index* 0.6);
+            tempActual= gradienteAdiabaticaSatura(TempStart, P, q0, presActual);
+        }
+        var ogg= new Object();
+        ogg.temp= tempActual;
+        ogg.altezza= altActual;
+        result[index]= ogg;
+    }
+    //console.log(result);
+    return result;
+}
+
+// //funzione che utilizza un'approssimazione per il gradiente rispettivamente di 0.02
+// function isoigromet(TempStart,P){
+//     var altMax= 0;
+//     var result= new Array(hmax*10+1);
+//     //console.log(result.length);
+//     var tempActual= TempStart;
+//     for (index= 0; index< result.length; index++){
+//         var altActual= (index*100)/1000;
+//         tempActual= TempStart-(index* 0.02);
+//         //console.log("TA "+tempActual+" tmin "+tmin);
+//         if (tempActual < 3*tmin){
+//             //console.log("e diventato minore");
+//             tempActual= 3*tmin;
+//             altActual= altMax;
+//             //console.log(altMax);
+//         }
+//         else{
+//             altMax= altActual;
+//         }
+//         var ogg= new Object();
+//         ogg.temp= tempActual;
+//         ogg.altezza= altActual;
+//         result[index]= ogg;
+//     }
+//     return result;
+// }
+
+//restituisce l'array con le coordinate dei punti dell'isoigrometrica che parte da TempStart
+//funzione che utilizza la funzione gradienteIsoIgrometrica
+function isoigromet2(TempStart,P){
+    var debug=false;
+    var altActual;
+    var result= new Array((hmax)*10+1);
+    //console.log(result.length);
+    var tempActual= 0;
+    for (index= 0; index< result.length; index++){
+    //for (index= 0; index< 5; index++){
+        altActual= (index*100)/1000;
+        if (debug)console.log("altActual :", altActual);
+        //tempActual= gradienteIsoIgrometrica (TempStart, quota2pICAO(altActual* 1000));
+        tempActual= gradienteIsoIgrometrica (TempStart, quota2Tp(altActual));
+        //tempActual= TempStart-(index* 0.02);
+        //console.log("TA "+tempActual+" tmin "+tmin);
+        var ogg= new Object();
+        ogg.temp= tempActual;
+        ogg.altezza= altActual;
+        result[index]= ogg;
+    }
+    if (debug) console.log("isoigromet2 result:",result);
+    return result;
+}
+
+//esat=pressione parziale del vapore d'acqua saturo espresso in hPa (è funzione solo di T)
+function esat(T){
+    //console.log(Math.exp(T));
+    return 6.1078*Math.exp(19.8*T/(T+273.15));
+}
+
+//proposed by Buck on 1996 modifying his previous equation
+function esat1(T){
+    //return 6.1121* Math.exp((18.678-T/234.5)*(T/(257.14+T)));
+    return 6.1121* Math.pow((Math.E),(18.678-T/234.5)*(T/(257.14+T)));
+}
+
+//data una pressione p e un rapporto di mescolanza q (gr/kg) trova la temperatura di rugiada Td: punto della isoigromentrica q di coordinate (Td,p)
+function tD(p, q){
+    if(q==0) return -120;
+    Td = 60;
+    var e = (q * p) / (621.98 + q);
+    var es = esat(Td);
+    while (es > e){
+        if ((es - e) > 0.1)
+        Td = (Td - 0.05);
+        else Td = Td - 0.0005;
+        es = esat(Td);
+    }
+    return Td;
+}
+
+//inversa di Td q=f(p,t)
+function qsat(t,p){
+    //data una temperatura e una pressione  trova la mescolanza di saturazione (valore costante della isoigrometrica passante per il punto P(t,p))
+    var mix_r = 80;
+    var e = (mix_r * p) / (621.98 + mix_r);
+    var es = esat(t);
+    while (e > es){
+        if ((e - es) > 0.1){
+            mix_r -=0.1;
+        }
+        else mix_r -= 0.0005;
+        e = (mix_r * p) / (621.98 + mix_r);
+        //print ("dopo",Td, es, e)
+    }
+    return mix_r;
+}
+
+//calcola la temperatura alla pressione p relativa alla isoigrometrica che parte da tpartenza
+function gradienteIsoIgrometrica (tpartenza, p){
+    var mix_r= qsat(tpartenza,pressione_base); //mescolanza di saturazione corrispondente a tpartenza//pressione_base
+    //return mix_r
+    return tD(p, mix_r);
+}
+
+//converte la quota in metri in pressione
+
+
+function quota2Tp (m){ // m in km
+	var debug=false;
+	if (m<dati[0].THGHT) return pres0; 
+    for (k= 0; k< dati.length-1; k++){
+        if (m == dati[k].THGHT) return dati[k].PRES;
+        if (m<dati[k].THGHT) {
+            var l1= dati[k-1].THGHT;
+            var l2= dati[k].THGHT;
+            var per= (m-l1)/(l2-l1);
+            return (dati[k-1].PRES-per*(dati[k-1].PRES-dati[k].PRES));
+        }
+    }
+    // Se siamo qui il sondaggio non contiene dati adatti alla conversione, ovvero m è superiore a tutti i punti
+    if (debug) console.log("Quota "+m+" non trovata nel sondaggio, cerco ICAO");
+    return quota2pICAO(m*1000);
+}
+
+
+function quota2pICAO(m){ //Beppe Russia m in metri
+    var B=0.00006848317;
+    if (m<=11000) return 1013.25*Math.pow([1-(0.0065*m / 288.15)],5.25588);
+    else return Math.pow(10,Math.log10(226.3204)- B*(m-11000));    
+}
+
+
+function p2quotaICAO(p){ //Beppe Russia
+    var a=1/5.25588;
+    var b=Math.pow(1013.25,a);
+    var B=0.00006848317;
+    var k=Math.log10(226.3204);
+
+    if (p>=226.324){
+        return 288*(Math.pow(p,a)-b)/(0.0065*(-b));
+    }
+    else{
+        return (k-Math.log10(p))/B+11000;
+    }    
+}
+
+
+function p2THGT (p){
+    var debug=false;
+
+    //return plog(p); 
+    p= Math.round(p);
+    if (p>dati[0].PRES) return 0;
+    for (k= 0; k< dati.length-1; k++){
+        if (p === dati[k].PRES) {
+            if (debug) console.log("p2THGT conversione a k=",k);
+            return 1000*dati[k].THGHT;
+        }
+        if (p>dati[k].PRES) {
+            var l1= dati[k-1].PRES;
+            var l2= dati[k].PRES;
+            var per= (p-l1)/(l2-l1);
+            if (debug) console.log(dati[k-1].PRES,dati[k].PRES);
+            return 1000*(dati[k-1].THGHT+per*(dati[k].THGHT-dati[k-1].THGHT));
+        }
+    }  
+    // Se siamo qui il sondaggio non contiene dati adatti alla conversione, ovvero p è inferiore a tutti i punti
+    if (debug) console.log("p< psondaggio");
+    return p2quotaICAO(p);
+}
+
+// calcola un’adiabatica umida (ovvero secca) conservando la ThetaMoist
+function gradienteAdiabaticaSecca(T0, p0, q0, p1){
+    // temperature in deg C! Mix r in g/kg.
+    var Ra= 289; //Rd
+    var Rv= 461.4;  //Rd/0.62198
+    var Cp_a= 1004; //7/2 Rd
+    var Cp_v= 1846; //4Rv
+    var Kel= 273.15;
+    var deltaT = 0.001;	 //differenza per essere in condensazione
+    var deltap = 1;	//incremento grossolano di livello in hPa  corrisponde a una variazione di 1C a 900hPa
+    var Td0 = IterTd(T0, p0, q0);	//in Celsius
+    //print(Td(p0,q0),IterTd(T0, p0, q0))
+    var Tk0 = T0 + Kel;	//in Kelvin
+    var qk0 = q0/1000.0;	//in kg/kg
+    var Theta0 = ThetaMoist(Tk0, p0, q0);	//in Kelvin
+    //console.log("La temperatura potenziale costante in Kelvin e’", (""+Theta0+"").substring(0, 6));
+    var p, T, Td, esp;
+    if (Td0 < (T0 - deltaT)){
+        p = p0; //hPa
+        T = T0; //C
+        Td = Td0; // C
+        esp = (Ra + Rv * qk0) / (Cp_a + Cp_v * qk0); // Moist adiabat
+        //esp = 0.2854;	// Dry adiabat
+        while ((T - Td) > deltaT){
+            p = p - deltap;
+            T = Theta0 * Math.pow(p / 1000.0, esp) - Kel; // in C
+            Td = IterTd(T, p, q0); //in C
+            if ((T-Td) < 1){
+                deltap = (T-Td);	//incremento fine di p
+            }
+            //print(p1,p,T)
+            if (Math.abs(p-p1) <1){
+                return T;
+            }
+        }
+    }
+}
+
+function gradienteAdiabaticaSatura(T0, p0, q0, pfin){ //pfin deve essere= a p0-n*10
+    var Ra= 286.99; //Rd
+    var Rv= 461.4;  //Rd/0.62198
+    var Cp_a= 1004; //7/2 Rd
+    var Cp_v= 1846; //4Rv
+    var Kel= 273.15;
+    var deltaT = 0.001;	 //differenza per essere in condensazione
+    var deltap = 10;
+    var qk0 = q0/1000.0;	// initial mix ratio in kg/kg
+    var q = qk0;
+    var p1 = p0;
+    var T1 = T0 + Kel;	// in Kelvin
+    
+    while (p1> pfin){	// lift up to pfin
+        var p2 = p1 - deltap;
+        var T2 = T1 * Math.pow(p2 / p1, 0.2854) - 2; // init = dry ad.-2
+        var delta = 10;
+        var a = T1;
+        var b = T2;
+        //print("T1=",a-Kel,"T2=",b-Kel,p2)
+        
+        while (Math.abs(delta)> 0.01) {	   // precisione equazione  0.01
+            T2 = (a + b) / 2.0;	           // the new temperature to find
+            var mix1 = Mix(T1-Kel, p1)/1000.0;  // vapour:	rho wat/rho air
+            var mix_cond1 = qk0 - mix1;	   // all condensed load in kg/kg
+            var mix2 = Mix(T2-Kel, p2)/1000.0;  // vapour:	rho wat/rho air
+            var mix_cond2 = qk0 - mix2;	   // all condensed load
+            var mix_cond_new = mix2 - mix1;     // new condensed in the step
+            var mix12 = (mix1 + mix2)/2.0;      // mean water vapour
+            
+            // heat retained by dry air and water vapour
+            var h_cp = (Cp_a + Cp_v * mix12) * (Math.log(T2) - Math.log(T1));
+            // heat relased by condensation of vapour in liquid
+            var Ent_cond = mix_cond_new * (L_evap(T2)/(T2*1.0) + L_evap(T1)/(T1*1.0)) / 2.0;
+            // ENTHALPY: (Sum delta T*Cp*q + Sum Lat Heat*q)
+            var H = h_cp + Ent_cond;	// specific henthalpy
+            // EXPANSION: (Vol*dp/dt = (Ra+q*Rv)*T*delta ln p)
+            var Ex = (Ra + mix12 * Rv) *(Math.log(p2) - Math.log(p1));
+            delta = H - Ex;	// must be close to 0
+            //print (H,Ex)
+            if (delta < 0) {
+                b = T2;
+            }
+            else{
+                a = T2;
+            }
+            // fine loop per calcolare T2
+        }
+        p1 = p2;
+        T1 = T2;
+        //print(p2,T2-Kel)
+    }
+    // fine loop principale
+    return T2-Kel;
+}
+
+// temperature in deg C! Mix r in g/kg. method:	Esat(Td) = e, start from T and
+// decrease temperature to fit a given mixing ratio
+function IterTd(T, p, mix_r){
+    var td = T;
+    var e = (mix_r * p) / (621.98 + mix_r);
+    var es = esat(td);
+    while (es > e){
+        if ((es - e) > 0.01){
+            td = td - 0.005;
+        }
+        else td = td - 0.0005;
+        es = esat(td);
+    }
+    return(td);	//in C deg
+}
+
+function ThetaMoist(Tk0, p0, q0){
+    return Tk0*(Math.pow(1000/p0, 2/7));
+}
+
+
+// calcola un’adiabatica umida conservando la ThetaMoist
+//restituisce la quota di condensazione e la temperatura
+function MoistAdiabat_old(T0, p0, q0){
+    // temperature in deg C! Mix r in g/kg.
+    var Kel= 273.15;
+    var deltaT = 0.001;	 //differenza per essere in condensazione
+    var deltap = 1;	// incremento grossolano di livello in hPa  corrisponde a una variazione di 1C a 900hPa
+    var Td0 = IterTd(T0, p0, q0);	// in Celsius
+    //print(Td(p0,q0),IterTd(T0, p0, q0))
+    var Tk0 = T0 + Kel;	// in Kelvin
+    var qk0 = q0/1000.0;	// in kg/kg
+    var Theta0 = ThetaMoist(Tk0, p0, q0); // in Kelvin
+    //print ("La temperatura potenziale costante in Kelvin e’", str(Theta0)[:6])
+    if (Td0 < (T0 - deltaT)){
+        var p = p0; //  hPa
+        var  T = T0;  // C
+        var Td = Td0; // C
+        //Ra forse è Rd=286.99
+        //Rv=0.62198 unit&agrave?
+        //esp = (Ra + Rv * qk0) / (Cp_a + Cp_v * qk0) # Moist adiabat
+        esp = 0.2854;	// Dry adiabat
+        while ((T - Td) > deltaT){
+            p = p - deltap;
+            T = Theta0 * Math.pow(p / 1000.0, esp) - Kel; // in C
+            Td = IterTd(T, p, q0); // in C
+            if ((T-Td) < 1){
+                deltap = (T-Td);
+            }// incremento fine di p
+            //print(p,T)
+        }
+    }
+    console.log("Raggiunto LCL m =", Math.floor(p2THGT(p)));//cast a int
+    //var arrayRet= [(""+p2quota(p)+"").substring(0, 5), (""+T+"").substring(0, 5)];
+    var arrayRet= [p2THGT(p), T];
+    //var gradSat=
+    return arrayRet;
+}
+
+// calcola un’adiabatica umida conservando la ThetaMoist
+//restituisce la quota di condensazione e la temperatura
+//MoistAdiabat(trueTEMP, quota2p(trueHGHT*1000), mix,tD(quota2p(trueHGHT*1000),mix));
+function MoistAdiabat(T0, p0, q0,tsat){
+    // temperature in deg C! Mix r in g/kg.
+    var Kel= 273.15;
+    var deltaT = 0.001;	 //differenza per essere in condensazione
+    var deltap = 1;	// incremento grossolano di livello in hPa  corrisponde a una variazione di 1C a 900hPa
+    var Td0 = IterTd(T0, p0, q0);	// in Celsius
+    //print(Td(p0,q0),IterTd(T0, p0, q0))
+    var Tk0 = T0 + Kel;	// in Kelvin
+    var qk0 = q0/1000.0;	// in kg/kg
+    var Theta0 = ThetaMoist(Tk0, p0, q0); // in Kelvin
+    //print ("La temperatura potenziale costante in Kelvin e’", str(Theta0)[:6])
+    if (Td0 < (T0 - deltaT)){
+        var p = p0; //  hPa
+        var  T = T0;  // C
+        var Td = tsat; // C
+        //Ra forse è Rd=286.99
+        //Rv=0.62198 unit&agrave?
+        //esp = (Ra + Rv * qk0) / (Cp_a + Cp_v * qk0) # Moist adiabat
+        esp = 0.2854;	// Dry adiabat
+        while ((T - Td) > deltaT){
+            //console.log(p,T,Td);
+            p = p - deltap;
+            T = Theta0 * Math.pow(p / 1000.0, esp) - Kel; // in C
+            //Td = IterTd(T, p, q0); // in C
+            if ((T-Td) < 1){
+                deltap = (T-Td);
+            }// incremento fine di p
+            //print(p,T)
+        }
+    }
+    console.log("Raggiunto LCL m =", Math.floor(p2THGT(p)));//cast a int
+    //var arrayRet= [(""+p2quota(p)+"").substring(0, 5), (""+T+"").substring(0, 5)];
+    var arrayRet= [p2THGT(p), T];
+    //var gradSat=
+    return arrayRet;
+}
+
+function Mix(t,p){
+    var e= esat(t);
+    return 612.98*e/(p-e);
+}
+
+function L_evap(t){
+    return 2500800 -2300*(t-273.15);
+}
+
+function PseudoMoist(T0, p0, q0,tdp){
+    //non usata
+    // Ad.	satura risolvendo l’eq.	derivata dal Primo Principio
+    var deltap = 10;	// incremento grossolano di livello in hPa
+    // corrisponde a una variazione di circa 1C a 900hPa
+    var qk0 = q0/1000.0; 	//initial mix ratio in kg/kg
+    var q = qk0;
+    var p1 = p0;
+    var Kel= 273.15;
+    var T1 = T0 + Kel;	// in Kelvin
+    //console.log(" ‘‘ThetaE iniziale = %f K’’ %(ThetaE(T0, p0, T0)[0]");
+    
+    while (p1>200){	// lift up to 200 hPa
+        var p2 = p1 - deltap;
+        var T2 = T1 * Math.pow(p2 / p1, 0.2854) - 2; // init = dry ad.-2
+        var delta = 10;
+        var a = T1;
+        var b = T2;
+        
+        while (Math.abs(delta)>0.01) {	// precisione equazione
+            T2 = (a + b) / 2.0;	// the new temperature to find
+            var mix1 = Mix(T1-Kel, p1)/1000.0; //vapour:	rho wat/rho air
+            var mix_cond1 = qk0 - mix1;		// all condensed load in kg/kg mix2 = Mix(T2-Kel, p2)/1000.0 # vapour:	rho wat/rho air
+            var mix_cond2 = qk0 - mix2;		// all condensed load
+            var mix_cond_new = mix2 - mix1; // new condensed in the step
+            var mix12 = (mix1 + mix2)/2.0; // mean water vapour
+            
+            // heat retained by dry air and water vapour
+            var h_cp = (Cp_a + Cp_v * mix12) * (math.log(T2) - math.log(T1));
+            // heat relased by condensation of vapour in liquid
+            var Ent_cond = mix_cond_new * (L_evap(T2)/(T2*1.0) + L_evap(T1)/(T1*1.0)) / 2.0;
+            // ENTHALPY: (Sum delta T*Cp*q + Sum Lat Heat*q)
+            var  H = h_cp + Ent_cond;	// specific henthalpy
+            // EXPANSION: (Vol*dp/dt = (Ra+q*Rv)*T*delta ln p)
+            var Ex = (Ra + mix12 * Rv) * (math.log(p2) - math.log(p1));
+            var delta = H - Ex;	// must be close to 0
+            if (delta < 0) {
+                b = T2;
+            }
+            else {
+                a = T2;
+            }
+        }// fine loop per calcolare T2
+        //print p, T-Kel p1 = p2
+        T1 = T2;
+    } // fine loop principale
+    
+    //console.log("Raggiunti i 200 hPa a T = %f C %(T2-Kel)");
+    //console.log("‘‘ThetaE finale = %f K’’ %(ThetaE(T2-Kel, p2, T2-Kel)[0])");
+    return(p2THGT(p2), T2);
+}
+
+
+//Funzioni per gestire l'interazione ******************
+
+function linkTooltip(){
+    //console.log("<function linkTooltip>","this.cy:",$(this.cy));
+    $(this).tipsy({
+                  delayIn: 0,
+                  gravity: 'w',
+                  html: true,
+                  title: function() {
+
+                  var p=Math.round(quota2Tp(y.invert($(this).attr("cy"))));
+                  var trueAlt= Math.round(p2THGT(p)); 
+                  var ICAOAlt= Math.round(p2quotaICAO(p)); 
+                  var mmix=Math.round(interpolatedMix(dati,p)*100)/100;
+                  var t=Math.round(tempValueJquery($(this).attr("cx"), $(this).attr("cy")));
+                  var tdew=Math.round(interpolatedTDWPT(dati,p)*100)/100;//var tdew=Math.round(tD(p,mmix)); 
+                  
+                  if (debug) console.log("linkTooltip,p,t,tdew,mmix:",p,t,tdew,mmix);                
+                  return '<div align=left><B>Pression: </B>'+p+' hPa</div><div align=left style:{margin:0}><B>Temperature: </B>'+t+'°</div><div align=left style:{margin:0}><B>Dew-point temp: </B>'+" "+tdew+'° </div>'+'<div align=left style:{margin:0}><B>Altitudine: </B>'+" "+Math.round(trueAlt)/1000+" "+' Km</div>'+'<div align=left style:{margin:0}><B>Standard altitude: </B>'+" "+Math.round(ICAOAlt)/1000+" "+' Km</div>'+'<div align=left><B>Mix: </B>'+mmix+' gr/Kg </div>';
+                  }
+                  });
+}
+
+function linkTooltip_rugiada(){
+    //console.log("<function linkTooltip>","this.cy:",$(this.cy));
+    $(this).tipsy({
+                  delayIn: 0,
+                  gravity: 'w',
+                  html: true,
+                  title: function() {
+                  var p=Math.round(quota2Tp(y.invert($(this).attr("cy"))));
+                  var trueAlt= Math.round(p2THGT(p));
+                  var mmix=Math.round(interpolatedMix(dati,p)*100)/100;
+                  var t=Math.round(tempValueJquery($(this).attr("cx"), $(this).attr("cy")));
+                  //var tdew=Math.round(tD(p,mmix));
+                  var tdew=Math.round(interpolatedTDWPT(dati,p)*100)/100;                
+                  return '<div align=left><B>Pression: </B>'+p+' hPa</div><div align=left style:{margin:0}><B>Dew-point temp: </B>'+" "+tdew+'° </div>'+'<div align=left style:{margin:0}><B>Altitudine: </B>'+" "+Math.round(trueAlt)/1000+" "+' Km</div>'+'<div align=left style:{margin:0}><B>Standard altitude: </B>'+" "+Math.round(y.invert($(this).attr("cy"))*1000)/1000+" "+' Km</div>'+'<div align=left><B>Mix: </B>'+mmix+' gr/Kg </div>';
+                  }
+                  });
+}
+
+function linkTooltip2(){
+    if (debug) console.log("<linkTooltip2>","this.x1:",$(this).attr("x1"));
+    if (debug) console.log("<linkTooltip2>","this.y1:",$(this).attr("y1"));
+    $(this).tipsy({
+                  delayIn: 0,
+                  gravity: 'w',
+                  html: true,
+                  title: function() {
+                  var xx=$(this).attr("x1");
+                  var yy=$(this).attr("y1");
+                  var p=Math.round(quota2Tp(y.invert($(this).attr("y1"))));
+                  var mmix=Math.round(interpolatedMix(dati,p)*100)/100;                  
+                  return "Wet adiabat: <br /><div align=left><B>Quota di condensazione: </B>"+rH(y.invert($(this).attr("cy")))+'Km</div><div align=left style:{margin:0}><B>Temperature alla quota di condensazione:</B>'+" "+Math.round(tempValueJquery($(this).attr("cx"), $(this).attr("cy")))+'°</div>';
+                  
+                  }
+                  });
+}
+
+function linkTooltip3(){
+    //console.log("<function linkTooltip>","this.cy:",$(this.cy));
+    $(this).tipsy({
+                  delayIn: 0,
+                  gravity: 'w',
+                  html: true,
+                  title: function() {
+                  var p=Math.round(quota2Tp(y.invert($(this).attr("cy"))));
+                  var mmix=Math.round(interpolatedMix(dati,p)*100)/100;                  
+                  return "Dry adiabat: <br /><div align=left><B>Starting altitude: </B>"+rH(y.invert($(this).attr("cy")))+'Km</div><div align=left style:{margin:0}><B>Starting temperature:</B>'+" "+Math.round(tempValueJquery($(this).attr("cx"), $(this).attr("cy")))+'°</div>';
+                  }
+                  });
+}
+
+function controllaPunti(selectedTemp, selectedAlt){
+	var tempState;
+	for (k= 0; k< dati.length-1; k++){
+	if (selectedAlt === dati[k].HGHT){
+		tempState= dati[k].TEMP;
+	}
+	else{
+		if (dati[k].HGHT< selectedAlt && dati[k+1].HGHT> selectedAlt){
+			tempState= (dati[k].TEMP+ dati[k+1].TEMP)/2;
+		}
+		}
+	}
+	if (selectedAlt==0)
+	   tempState=dati[0].TEMP;
+    if (debug) console.log("<controllaPunti selectedTemp, selectedAlt,tempstato>",selectedTemp, selectedAlt,tempState);
+    return(selectedTemp>= tempState+2);
+    /*
+    if (selectedTemp>= tempState+0.1){
+        return true;
+    }
+    else return false;
+    */
+}
+
+
+function hSat_tSecca(T0,p0,q0,p1,tempSat,dp,offset){ //calcola la quota di saturazione lungo un'adiabatica secca
+    var debug=false;
+    var debug3=true;
+    if (debug3) console.log('hSat_tSecca('+T0,p0,q0,p1,tempSat,dp,offset+')');
+    q0=0.1;
+    Kel=273.15;
+    deltaT = 0.001;         // differenza per essere in condensazione
+    deltap = 1;           // incremento grossolano di livello in hPa  corrisponde a una variazione di 1C a 900hPa
+    Td0 = IterTd(T0, p0, q0);   // in Celsius
+    Tk0 = T0 + Kel; // in Kelvin
+    qk0 = q0/1000.0;    // in kg/kg
+    Theta0 = ThetaMoist(Tk0, p0, q0);   // in Kelvin
+    if (Td0 < (T0 - deltaT)) {
+        p = p0; // hPa
+        T = T0; // C
+        Td = Td0; // C
+        //esp = (Ra + Rv * qk0) / (Cp_a + Cp_v * qk0); // Moist adiabat
+        esp = 0.2854;   // Dry adiabat
+        //print(esp)
+        while (tempSat<T) {
+            p = p - deltap;
+            T = Theta0 * Math.pow(p / 1000.0, esp) - Kel; // in C
+            Td = IterTd(T, p, q0); //in C
+            if (debug) console.log(p,T);    
+            }
+        } 
+    return p2THGT(p);      
+ }
+
+function tSecca4Click(T0,p0,q0,p1,dp,offset){
+    p1=100;
+    debug3=true;
+    if (debug3) console.log('tSecca4Click('+T0+","+p0+","+q0+","+p1+","+dp+","+offset+")");   // p1 pressione di arrivo
+    q0=0.01;
+    var resulttSecca=new(Array);
+    var Kel=273.15;
+    var deltaT = 0.001; 
+    var deltaT = 0.1;                 // differenza per essere in condensazione
+    var deltap = dp;                  // incremento grossolano di livello in hPa  corrisponde a una variazione di 1C a 900hPa
+    var Td0 = IterTd(T0, p0, q0);     // in Celsius
+    var Tk0 = T0 + Kel;     // in Kelvin
+    var qk0 = q0/1000.0;    // in kg/kg
+    var Theta0 = ThetaMoist(Tk0, p0, q0);   // in Kelvin
+    if (Td0 < (T0 - deltaT)) {
+        p = p0; // hPa
+        T = T0; // C
+        Td = Td0; // C      
+        esp = 0.2854;   // Dry adiabat //esp = (Ra + Rv * qk0) / (Cp_a + Cp_v * qk0); // Moist adiabat
+        var i=0;
+        while (p>p1) {
+            p = p - deltap;
+            deltap+=offset;
+            T = Theta0 * Math.pow(p / 1000.0, esp) - Kel; // in C
+            Td = IterTd(T, p, q0); //in C
+            //if ((T-Td) < 1) deltap = (T-Td);    // incremento fine di p     
+            //console.log(p1,p,T,p2THGT(p));
+            if (T && p2THGT(p)/1000){    
+                var ogg= new Object();
+                ogg.temp= T;
+                ogg.altezza= p2THGT(p)/1000;
+                //console.log(i,ogg);
+                i++;
+                resulttSecca.push(ogg);}
+            }
+        }    
+        return resulttSecca;    
+} 
+
+var Gresult;
+var GGresult;
+var Gresult0;
+var Gndati=dati.length;
+var Gsa;
+var Gss;
+var Gp=[];
+
+
+function toClick(){
+    var debug=true;
+    if (debug) console.log("<toClick> START");
+    function removeAll(){
+        d3.selectAll("#selPoint").remove();
+        d3.selectAll("#firstPoint").remove();
+        d3.selectAll("#saturPoint").remove();
+        d3.selectAll("#actualIsogr").remove();
+        d3.selectAll("#adiabSeccaSalita").remove();
+        d3.selectAll("#actualAdSat").remove();
+        d3.selectAll("#actualAdSec").remove();
+        svg.selectAll(".satMarker").remove();
+    }
+    removeAll();
+    var coordinates = d3.mouse(this);
+    var coordx= Math.round(coordinates[0]);
+    var coordy= Math.round(coordinates[1]);
+    if (debug) console.log("toClick START at x:",coordx,"y:",coordy);
+    if (coordy>680) coordy=680;
+    if (coordx>680) coordx=680;
+    var trueTEMP= tempValue(coordx, coordy);
+    var hght= coordy-margin.top;
+    var trueHGHT= y.invert(hght);
+    var truePress= quota2Tp(trueHGHT);
+    
+    if (debug) console.log("toClick trueTEMP:",trueTEMP, "H:",trueHGHT, "p:",truePress);
+        
+    var mix= interpolatedMix(dati, truePress);
+    if (debug) console.log("toClick mix:",mix, "a una p:",truePress);
+    if (!controllaPunti(trueTEMP, trueHGHT)) return;  ////CIN
+
+    var tempSat=tD(truePress,mix);
+    //var highSat_old=trueHGHT+(trueTEMP-tempSat)/9.76;
+    var highSat=hSat_tSecca(trueTEMP,truePress,0,100,tempSat,0.1,0)/1000;
+
+
+    var presSat=quota2Tp(highSat);
+
+    if (debug) console.log("higSat:"+highSat, "\ntempSat:"+tempSat,"\npresSat:"+presSat);
+
+    if (!presSat) return;
+    //if (highSat>dati[dati.length-1].HGHT) return;
+
+	
+
+
+
+
+
+	var tempState=10;
+	var altState=10;
+	if (debug) console.log("truePress:",truePress);
+
+	for (k= 0; k< dati.length-1; k++){
+		if (highSat === dati[k].HGHT){
+			tempState= dati[k].TEMP;
+			altState= dati[k].HGHT;
+			break;
+		}
+		else{
+			if (dati[k].HGHT< highSat && dati[k+1].HGHT> highSat){
+				tempState= (dati[k].TEMP+ dati[k+1].TEMP)/2;
+				altState= (dati[k].HGHT+ dati[k+1].HGHT)/2;
+				break;
+			}
+		}		
+	}  
+    if (debug) console.log(k,":tempState:",tempState, "altState:",altState); 
+
+
+	for (k= 0; k< dati.length-1; k++){
+		if (presSat === dati[k].PRES){
+			tempState= dati[k].TEMP;
+			altState= dati[k].HGHT;
+			break;
+		}
+		else{
+			if (dati[k].PRES> presSat && dati[k+1].PRES< presSat){
+				tempState = (dati[k].TEMP+ dati[k+1].TEMP)/2;
+				altState = (p2THGT(dati[k].PRES)+ p2THGT(dati[k+1].PRES))/2000;
+				break;
+			}
+		}		
+	}  
+	if (debug) console.log("K, tempState:",k,tempState, "altState:",altState);
+
+	if (tempSat > tempState){ //si forma il cumolo
+		if (debug) console.log("Cumolo in to clic !!!!");
+		if (debug) console.log("tempSat:",tempSat,"mix:",mix);
+		var ris2 = adiabForClick2(dati,tempSat, highSat, tempSat, mix);
+        if (debug) console.log("ris2",ris2);
+		if (ris2.length==0) { removeAll(); return; }
+
+
+        svg.append("line")
+        .attr("id", "selPoint")
+        .attr("cx", coordx- margin.right)
+        .attr("cy", hght)
+        .attr("x1", coordx-margin.right-10).attr("y1", hght)
+        .attr("x2",  coordx-margin.right+10).attr("y2", hght)
+        .attr("stroke", "green")
+        .attr("stroke-width", 3)
+        .style("opacity", 1)
+        .attr("clip-path", "url(#plot-region)")
+        .each(linkTooltip3);
+		
+		svg.append("line")
+		.attr("class","satMarker") // sat Marker
+		.attr("id", "satLine")
+		.attr("cx", x(tempSat+ 5*highSat)) //"gradiente" termico isoigrometrica 5° km
+		.attr("cy", y(highSat))
+		.attr("x1", x(tempSat+ 5*highSat)-10).attr("y1", y(highSat))
+		.attr("x2", x(tempSat+ 5*highSat)+10).attr("y2", y(highSat))
+		.attr("stroke", "purple")
+		.attr("stroke-width", 3)
+		.style("opacity", 1)
+		.attr("clip-path", "url(#plot-region)")
+		.each(linkTooltip2);
+
+		svg.append("path")
+		.attr("class","satMarker") //Sat line
+		.attr("id", "actualAdSat")
+		.attr("d", lineAdiabaticaT(ris2))
+		.attr("stroke", "purple")
+		.attr("stroke-width", 2)
+		.attr("fill", "none")
+		.attr("opacity", 1)
+		.attr("clip-path", "url(#plot-region)");
+
+		// svg.append("line").attr("id", "adiabSeccaSalita").attr("x1", coordx- margin.right).attr("y1", hght) //dry line
+		// .attr("x2", x(tempSat+ 5*((highSat)))).attr("y2", y(highSat))
+		// .attr("stroke", "green")
+		// .attr("stroke-width", 3)
+		// .style("opacity", 1)
+		// .attr("clip-path", "url(#plot-region)");
+
+         var result=tSecca(trueTEMP,truePress,0,presSat,1,0);
+         svg.append("path")
+        .attr("id", "actualAdSec")
+        .attr("d", lineAdiabaticaT(result))
+        .attr("stroke", "green")
+        .attr("stroke-width", 2)
+        .attr("fill", "none")
+        .attr("opacity", 1)
+        .attr("clip-path", "url(#plot-region)");
+	}
+	else{
+		//Gresult0= adSeccaForClick(dati, trueTEMP, trueHGHT, tempState, altState);
+
+        Gresult=tSecca4Click(trueTEMP,truePress,0,presSat-1,1,0);
+        if (debug) console.log("Gresult",Gresult);
+
+        if (debug) console.log("trueTEMP, trueHGHT, tempState, altState,quota2Tp(altState)",trueTEMP, trueHGHT, tempState, altState,quota2Tp(altState));
+ 
+        if (debug) console.log("Ciclo");
+        var i;
+        var j;
+        var trovato=false;
+        var indice;
+        Gp=[];
+        var oggGp= new Object();
+        for (i=0; i<Gresult.length-1; i++)
+            for (j=0; j<dati.length-1; j++){
+                if (interb( [Gresult[i].temp,Gresult[i].altezza,Gresult[i+1].temp,Gresult[i+1].altezza],
+                   [dati[j].TEMP,dati[j].HGHT,dati[j+1].TEMP,dati[j+1].HGHT] )){
+                    Gp=intern([Gresult[i].temp,Gresult[i].altezza,Gresult[i+1].temp,Gresult[i+1].altezza],
+                   [dati[j].TEMP,dati[j].HGHT,dati[j+1].TEMP,dati[j+1].HGHT]);
+                   
+                   oggGp.temp= Gp[0];
+                   oggGp.altezza= Gp[1];
+                    trovato=true;
+                    indice=i;
+                   break; 
+                }
+            }
+             if (debug) console.log("ciclo",trovato, indice,j,Gp,oggGp);
+            
+
+        GGresult=[]; 
+        if (trovato){
+            for (var i=0; i<indice+1; i++)
+              GGresult.push(Gresult[i]);
+            GGresult.push(oggGp);
+        }
+        else return;
+
+
+
+
+        svg.append("line")
+        .attr("id", "selPoint")
+        .attr("cx", coordx- margin.right)
+        .attr("cy", hght)
+        .attr("x1", coordx-margin.right-10).attr("y1", hght)
+        .attr("x2",  coordx-margin.right+10).attr("y2", hght)
+        .attr("stroke", "green")
+        .attr("stroke-width", 3.5)
+        .style("opacity", 1)
+        .attr("clip-path", "url(#plot-region)")
+        .each(linkTooltip3);
+
+
+         svg.append("path")
+        .attr("id", "actualAdSec")
+        .attr("d", lineAdiabaticaT(GGresult))
+        .attr("stroke", "green")
+        .attr("stroke-width", 2)
+        .attr("fill", "none")
+        .attr("opacity", 1)
+        .attr("clip-path", "url(#plot-region)");
+        
+
+	}    
+}// end toClick
+
+function cerca(){
+        console.log("cerca");
+        var i;
+        var j;
+        for (i=0; i<Gresult.length-2; i++)
+            for (j=0; j<dati.length-2; j++)
+                if (interb( [Gresult[i].temp,Gresult[i].altezza,Gresult[i+1].temp,Gresult[i+1].altezza],
+                   [dati[j].TEMP,dati[j].HGHT,dati[j+1].TEMP,dati[j+1].HGHT] )){
+                   p=intern()
+
+                console.log("carca",i,j,);
+        }
+            }
+
+
+function removeForecast(){
+    var debug=false;
+    if (debug) console.log("<removeForecast> START");
+        d3.selectAll("#selPoint").remove();
+        d3.selectAll("#firstPoint").remove();
+        d3.selectAll("#actualAdSec").remove();
+        d3.selectAll("#actualIsogr").remove();
+        d3.selectAll("#adiabSeccaSalita").remove();
+        d3.selectAll("#actualAdSat").remove();
+        d3.selectAll("#actualAdSec").remove();
+        svg.selectAll(".satMarker").remove();
+    }
+
+function previsioni(temperatura, altezza){
+    var debug=false;
+    if (debug) console.log("previsioni param temp:",temperatura,"alt:",altezza);
+    if (debug) console.log("<toClick> START");
+    //var coordinates = d3.mouse(this);
+    //var coordx= 617;
+    //var coordy= 664;
+    //if (true) console.log("previsioni coordx:",coordx,"coordy:",coordy);
+    var coordy=y(altezza)+margin.right;
+    var coordx=x(temperatura)+(680-coordy)+margin.right;
+    if (debug) console.log("previsioni coordx:",coordx,"coordy:",coordy);
+    var trueTEMP= tempValue(coordx, coordy);
+    var hght= coordy-margin.top;
+    var trueHGHT= y.invert(hght);
+    var truePress= quota2Tp(trueHGHT);
+    
+    if (debug) console.log("previsioni trueTEMP:",trueTEMP, "H:"+"==",trueHGHT, "p:",truePress);
+        
+    var mix= interpolatedMix(dati, truePress);
+    if (debug) console.log("previsioni mix:",mix, "a una p:",truePress);
+    if (!controllaPunti(trueTEMP, trueHGHT)) return;  ////CIN
+
+    //coordix=temperatura;
+    //coordy=y(400); //0.4 = 663
+ 
+    if (debug) console.log("previsioni START at x:",coordx,"y:",coordy);
+    svg.append("line")
+    .attr("id", "selPoint")
+    .attr("cx", coordx- margin.right)
+    .attr("cy", hght)
+    .attr("x1", coordx-margin.right-10).attr("y1", hght)
+    .attr("x2",  coordx-margin.right+10).attr("y2", hght)
+    .attr("stroke", "green")
+    .attr("stroke-width", 3)
+    .style("opacity", 1)
+    .attr("clip-path", "url(#plot-region)")
+    .each(linkTooltip3);    
+    var tempSat=tD(truePress,mix);
+    var highSat=trueHGHT+(trueTEMP-tempSat)/9.76;
+    var presSat=quota2Tp(highSat);
+    if (debug) console.log("higSat:",highSat, "tempSat:",tempSat,"presSat:",presSat);
+    var tempState=10;
+    var altState=10;
+    if (debug) console.log("truePress:",truePress);
+
+    for (k= 0; k< dati.length-1; k++){
+        if (highSat === dati[k].HGHT){
+            tempState= dati[k].TEMP;
+            altState= dati[k].HGHT;
+            break;
+        }
+        else{
+            if (dati[k].HGHT< highSat && dati[k+1].HGHT> highSat){
+                tempState= (dati[k].TEMP+ dati[k+1].TEMP)/2;
+                altState= (dati[k].HGHT+ dati[k+1].HGHT)/2;
+                break;
+            }
+        }       
+    }  
+    if (debug) console.log("tempState:",tempState, "altState:",altState); 
+    tempState=11;
+    altState=11;
+    if (debug) console.log("tempState:",tempState, "altState:",altState); 
+    for (k= 0; k< dati.length-1; k++){
+        //if (debug) console.log("k",k,(dati[k].PRES> presSat && dati[k+1].PRES < presSat),dati[k].PRES,presSat,dati[k+1].PRES);
+        if (presSat === dati[k].PRES){
+            tempState= dati[k].TEMP;
+            altState= dati[k].HGHT;
+            break;
+        }
+        else{
+            if (dati[k].PRES> presSat && dati[k+1].PRES< presSat){
+                tempState = (dati[k].TEMP+ dati[k+1].TEMP)/2;
+                altState = (p2THGT(dati[k].PRES)+ p2THGT(dati[k+1].PRES))/2000;
+                break;
+            }
+        }       
+    }  
+    if (debug) console.log("tempState:",tempState, "altState:",altState);
+    
+    if (tempSat > tempState){ //si forma il cumolo
+        if (debug) console.log("Cumolo in to clic !!!!");
+        if (debug) console.log("tempSat:",tempSat,"mix:",mix);
+        var ris2 = adiabForClick2(dati,tempSat, highSat, tempSat, mix);
+        if (ris2.length==0) { removeAll(); return; }
+        
+        svg.append("line")
+        .attr("class","satMarker") // sat Marker
+        .attr("id", "satLine")
+        .attr("cx", x(tempSat+ 5*highSat)) //"gradiente" termico isoigrometrica 5° km
+        .attr("cy", y(highSat))
+        .attr("x1", x(tempSat+ 5*highSat)-10).attr("y1", y(highSat))
+        .attr("x2", x(tempSat+ 5*highSat)+10).attr("y2", y(highSat))
+        .attr("stroke", "purple")
+        .attr("stroke-width", 3)
+        .style("opacity", 1)
+        .attr("clip-path", "url(#plot-region)")
+        .each(linkTooltip2);
+
+        svg.append("path")
+        .attr("class","satMarker") //Sat line
+        .attr("id", "actualAdSat")
+        .attr("d", lineAdiabaticaT(ris2))
+        .attr("stroke", "purple")
+        .attr("stroke-width", 3)
+        .attr("fill", "none")
+        .attr("opacity", 1)
+        .attr("clip-path", "url(#plot-region)");
+
+        svg.append("line").attr("id", "adiabSeccaSalita").attr("x1", coordx- margin.right).attr("y1", hght) //dry line
+        .attr("x2", x(tempSat+ 5*((highSat)))).attr("y2", y(highSat))
+        .attr("stroke", "green")
+        .attr("stroke-width", 2)
+        .style("opacity", 1)
+        .attr("clip-path", "url(#plot-region)");
+    }
+    else{
+        var result= adSeccaForClick(dati, trueTEMP, trueHGHT, tempState, altState);
+        svg.append("path")
+        .attr("id", "actualAdSec")
+        .attr("d", lineAdiabaticaT(result))
+        .attr("stroke", "green")
+        .attr("stroke-width", 1.5)
+        .attr("fill", "none")
+        .attr("opacity", 1)
+        .attr("clip-path", "url(#plot-region)");
+        if (debug) console.log("toclick ineAdiabaticaT(result)",lineAdiabaticaT(result));
+    }    
+}// end toCli
+
+function previsioni(temperatura, altezza){
+	var debug=false;
+    if (debug) console.log("previsioni param temp:",temperatura,"alt:",altezza);
+    if (debug) console.log("<toClick> START");
+    //var coordinates = d3.mouse(this);
+    //var coordx= 617;
+    //var coordy= 664;
+    //if (true) console.log("previsioni coordx:",coordx,"coordy:",coordy);
+    var coordy=y(altezza)+margin.right;
+    var coordx=x(temperatura)+(680-coordy)+margin.right;
+
+    if (debug) console.log("previsioni coordx:",coordx,"coordy:",coordy);
+       if (coordy>680) coordy=680;
+    if (coordx>680) coordx=680;
+    var trueTEMP= tempValue(coordx, coordy);
+    var hght= coordy-margin.top;
+    var trueHGHT= y.invert(hght);
+    var truePress= quota2Tp(trueHGHT);
+    
+    if (debug) console.log("toClick trueTEMP:",trueTEMP, "H:",trueHGHT, "p:",truePress);
+        
+    var mix= interpolatedMix(dati, truePress);
+    if (debug) console.log("toClick mix:",mix, "a una p:",truePress);
+    if (!controllaPunti(trueTEMP, trueHGHT)) return;  ////CIN
+    
+
+
+    var tempSat=tD(truePress,mix);
+    var highSat_old=trueHGHT+(trueTEMP-tempSat)/9.76;
+    var highSat=hSat_tSecca(trueTEMP,truePress,0,100,tempSat,1,0)/1000;
+
+    if (debug) console.log("highSat_old,highSat",highSat_old,highSat,quota2Tp(highSat_old),quota2Tp(highSat));
+    
+
+
+
+    var presSat=quota2Tp(highSat);
+    if (debug) console.log("higSat:",highSat, "tempSat:",tempSat,"presSat:",presSat);
+    var tempState=10;
+    var altState=10;
+    if (debug) console.log("truePress:",truePress);
+
+    for (k= 0; k< dati.length-1; k++){
+        if (highSat === dati[k].HGHT){
+            tempState= dati[k].TEMP;
+            altState= dati[k].HGHT;
+            break;
+        }
+        else{
+            if (dati[k].HGHT< highSat && dati[k+1].HGHT> highSat){
+                tempState= (dati[k].TEMP+ dati[k+1].TEMP)/2;
+                altState= (dati[k].HGHT+ dati[k+1].HGHT)/2;
+                break;
+            }
+        }       
+    }  
+    if (debug) console.log(k,":tempState:",tempState, "altState:",altState); 
+
+    //return;
+
+    for (k= 0; k< dati.length-1; k++){
+        //if (debug) console.log("k",k,(dati[k].PRES> presSat && dati[k+1].PRES < presSat),dati[k].PRES,presSat,dati[k+1].PRES);
+        if (presSat === dati[k].PRES){
+            tempState= dati[k].TEMP;
+            altState= dati[k].HGHT;
+            break;
+        }
+        else{
+            if (dati[k].PRES> presSat && dati[k+1].PRES< presSat){
+                tempState = (dati[k].TEMP+ dati[k+1].TEMP)/2;
+                altState = (p2THGT(dati[k].PRES)+ p2THGT(dati[k+1].PRES))/2000;
+                break;
+            }
+        }       
+    }  
+    if (debug) console.log("K, tempState:",k,tempState, "altState:",altState);
+
+    if (tempSat > tempState){ //si forma il cumolo
+        if (debug) console.log("Cumolo in to clic !!!!");
+        if (debug) console.log("tempSat:",tempSat,"mix:",mix);
+        var ris2 = adiabForClick2(dati,tempSat, highSat, tempSat, mix);
+        if (debug) console.log("ris2",ris2);
+        if (ris2.length==0) { removeAll(); return; }
+
+
+        svg.append("line")
+        .attr("id", "selPoint")
+        .attr("cx", coordx- margin.right)
+        .attr("cy", hght)
+        .attr("x1", coordx-margin.right-10).attr("y1", hght)
+        .attr("x2",  coordx-margin.right+10).attr("y2", hght)
+        .attr("stroke", "green")
+        .attr("stroke-width", 3.5)
+        .style("opacity", 1)
+        .attr("clip-path", "url(#plot-region)")
+        .each(linkTooltip3);
+        
+        svg.append("line")
+        .attr("class","satMarker") // sat Marker
+        .attr("id", "satLine")
+        .attr("cx", x(tempSat+ 5*highSat)) //"gradiente" termico isoigrometrica 5° km
+        .attr("cy", y(highSat))
+        .attr("x1", x(tempSat+ 5*highSat)-10).attr("y1", y(highSat))
+        .attr("x2", x(tempSat+ 5*highSat)+10).attr("y2", y(highSat))
+        .attr("stroke", "purple")
+        .attr("stroke-width", 3)
+        .style("opacity", 1)
+        .attr("clip-path", "url(#plot-region)")
+        .each(linkTooltip2);
+
+        svg.append("path")
+        .attr("class","satMarker") //Sat line
+        .attr("id", "actualAdSat")
+        .attr("d", lineAdiabaticaT(ris2))
+        .attr("stroke", "purple")
+        .attr("stroke-width", 2)
+        .attr("fill", "none")
+        .attr("opacity", 1)
+        .attr("clip-path", "url(#plot-region)");
+
+        // svg.append("line").attr("id", "adiabSeccaSalita").attr("x1", coordx- margin.right).attr("y1", hght) //dry line
+        // .attr("x2", x(tempSat+ 5*((highSat)))).attr("y2", y(highSat))
+        // .attr("stroke", "green")
+        // .attr("stroke-width", 3)
+        // .style("opacity", 1)
+        // .attr("clip-path", "url(#plot-region)");
+
+         var result=tSecca(trueTEMP,truePress,0,presSat,1,0);
+         svg.append("path")
+        .attr("id", "actualAdSec")
+        .attr("d", lineAdiabaticaT(result))
+        .attr("stroke", "green")
+        .attr("stroke-width", 2)
+        .attr("fill", "none")
+        .attr("opacity", 1)
+        .attr("clip-path", "url(#plot-region)");
+    }
+    else{
+               Gresult=tSecca4Click(trueTEMP,truePress,0,presSat-1,1,0);
+        if (debug) console.log("Gresult",Gresult);
+
+        if (debug) console.log("trueTEMP, trueHGHT, tempState, altState,quota2Tp(altState)",trueTEMP, trueHGHT, tempState, altState,quota2Tp(altState));
+ 
+        if (debug) console.log("Ciclo");
+        var i;
+        var j;
+        var trovato=false;
+        var indice;
+        Gp=[];
+        var oggGp= new Object();
+        for (i=0; i<Gresult.length-1; i++)
+            for (j=0; j<dati.length-1; j++){
+                if (interb( [Gresult[i].temp,Gresult[i].altezza,Gresult[i+1].temp,Gresult[i+1].altezza],
+                   [dati[j].TEMP,dati[j].HGHT,dati[j+1].TEMP,dati[j+1].HGHT] )){
+                    Gp=intern([Gresult[i].temp,Gresult[i].altezza,Gresult[i+1].temp,Gresult[i+1].altezza],
+                   [dati[j].TEMP,dati[j].HGHT,dati[j+1].TEMP,dati[j+1].HGHT]);
+                   
+                   oggGp.temp= Gp[0];
+                   oggGp.altezza= Gp[1];
+                    trovato=true;
+                    indice=i;
+                   break; 
+                }
+            }
+             if (debug) console.log("ciclo",trovato, indice,j,Gp,oggGp);
+            
+
+        GGresult=[]; 
+        if (trovato){
+            for (var i=0; i<indice+1; i++)
+              GGresult.push(Gresult[i]);
+            GGresult.push(oggGp);
+        }
+        else return;
+
+
+
+
+        svg.append("line")
+        .attr("id", "selPoint")
+        .attr("cx", coordx- margin.right)
+        .attr("cy", hght)
+        .attr("x1", coordx-margin.right-10).attr("y1", hght)
+        .attr("x2",  coordx-margin.right+10).attr("y2", hght)
+        .attr("stroke", "green")
+        .attr("stroke-width", 3.5)
+        .style("opacity", 1)
+        .attr("clip-path", "url(#plot-region)")
+        .each(linkTooltip3);
+
+
+         svg.append("path")
+        .attr("id", "actualAdSec")
+        .attr("d", lineAdiabaticaT(GGresult))
+        .attr("stroke", "green")
+        .attr("stroke-width", 2)
+        .attr("fill", "none")
+        .attr("opacity", 1)
+        .attr("clip-path", "url(#plot-region)");
+
+    }    
+}// end toCli
+
+
+
+
+//funzioni che controllano lo stato delle checkbox
+function checkSecca(curva){
+    if (curva.checked){
+        drawAdSecca();
+        Curves_adiabatichesecche=true;
+    }
+    else{
+        d3.selectAll(".adiabSec").remove();
+        Curves_adiabatichesecche=false;
+    }
+}
+function checkSatura(curva){
+    if (curva.checked){
+        drawAdSatura();
+        Curves_adiabatichesature=true;
+    }
+    else{
+        d3.selectAll(".adiabSat").remove();
+        Curves_adiabatichesature=false;
+    }
+}
+function checkIsoigrom(curva){
+    if (curva.checked){
+        drawIsoigrom2();
+        //drawLabelMix("green");
+        Curves_isoigrometriche=true;
+    }
+    else{
+        d3.selectAll(".isoigrom").remove();
+        //d3.selectAll(".labelmix").remove();
+        Curves_isoigrometriche=false;
+    }
+}
+function checkTP(curva){
+    if (curva.checked){
+        Axes_guides=true;
+    }
+    else{
+        d3.selectAll("#tropopausa").remove();
+        Axes_guides=false;
+    }
+}
+function checkIsometrics(curva){
+    if (curva.checked){
+        Curves_isometriche=true;
+        drawIsometrics();
+      }
+    else{
+        d3.selectAll(".isometriche").remove();
+        Curves_isometriche=false;
+    }
+}
+function checkIsobars(curva){
+    if (curva.checked){
+        drawIsobars();
+        Curves_isobare=true;
+    }
+    else{
+        d3.selectAll(".isobare").remove();
+        Curves_isobare=false;
+    }
+}
+function checkLabelMix(curva){
+    var debug=false;
+    if (curva.checked){
+        drawLabelMix("green");
+        Curves_labelmix=true;
+    }
+    else{
+        var k=d3.selectAll(".labelmix").remove();
+        if (debug) console.log('rimuovo!',k);
+        Curves_labelmix=false;
+    }
+}
+function checkQuoteIsobars(curva){
+    if (curva.checked){
+        drawQuoteIsobars();
+        Curves_quoteisobare=true;
+    }
+    else{
+        var k=d3.selectAll(".quoteisob").remove();
+        Curves_quoteisobare=false;
+    }
+}
+function checkPuntiSoundingso(curva){
+    if (curva.checked){
+        PuntiSoundingso=true;
+		drawState();
+		drawDewPoint();
+
+    }
+    else{
+        PuntiSoundingso=false;
+		drawState();
+		drawDewPoint();
+  	
+    }
+}
+function checkState(curva){
+    if (curva.checked){
+        Curves_stato=true;
+		drawGraph(gran, hmax, hmin, tmax, tmin, inputData);
+    }
+    else{
+        Curves_stato=false;
+		drawGraph(gran, hmax, hmin, tmax, tmin, inputData);	
+    }
+}
+function checkDewPoint(curva){
+    if (curva.checked){
+        Curves_rugiada=true;
+		drawGraph(gran, hmax, hmin, tmax, tmin, inputData);	
+    }
+    else{
+        Curves_rugiada=false;
+		drawGraph(gran, hmax, hmin, tmax, tmin, inputData);	 	
+    }
+}
+function checkForecast(curva){
+    if (curva.checked){
+        //tPrevisione=30; //617
+        removeForecast();
+        previsioni(tPrevisione,0.4);
+        previsioni(tPrevisione,0.7);
+        previsioni(tPrevisione,1);
+        Forecast=true;
+		//drawGraph(gran, hmax, hmin, tmax, tmin, inputData);	
+    }
+    else{
+    	removeForecast();
+        Forecast=false;
+		//drawGraph(gran, hmax, hmin, tmax, tmin, inputData);	 	
+    }
+}
+function checkswapmp(curva){
+    if (curva.checked){
+        IsoSwap=false;
+        Curves_isometriche=true;
+		Curves_isobare=false;
+        //drawGraph(gran, hmax, hmin, tmax, tmin, inputData);
+		//drawIsometrics();
+        //drawPIsometrics();
+        drawGraph(gran, hmax, hmin, tmax, tmin, inputData);
+    }
+    else{
+        IsoSwap=true;
+        Curves_isometriche=false;
+		Curves_isobare=true;
+        //drawGraph(gran, hmax, hmin, tmax, tmin, inputData);
+        //drawIsobars();
+        //drawQuoteIsobars();
+        drawGraph(gran, hmax, hmin, tmax, tmin, inputData);
+    }
+    if (Forecast){
+    	removeForecast();
+    	previsioni(tPrevisione,0.4);
+        previsioni(tPrevisione,0.7);
+        previsioni(tPrevisione,1);
+    }
+}
+function checkCin(curva){
+    if (curva.checked){
+        Cin=true;
+        drawCin();
+    }
+    else{
+        Cin=false;
+        d3.selectAll(".cin").remove();
+    }
+}
+function checkCin500(curva){
+    if (curva.checked){
+        Cin500=true;
+        if (Cin){
+            d3.selectAll(".cin").remove();
+            drawCin();
+        }
+    }
+    else{
+        Cin500=false;
+        
+        if (Cin){
+            d3.selectAll(".cin").remove();
+            drawCin();
+        }
+        //d3.selectAll(".cin").remove();
+    }
+}
+
+//funzione chiamata quando viene premuto il tasto Back
+function goBack(){
+    G_pasted=false;
+    //var stazione=document.getElementById("info").innerHTML= localita.toUpperCase()+ " :";
+    //console.log("stazione",stazione);
+    var oraSond= document.getElementById("oraSondag");
+    actualState= inputData;
+    //console.log("InDAta: "+inputData);
+    actualMetaState= inputMetaData;
+    year= actualState.substring(0,4);
+    month= actualState.substring(4,6);
+    day= actualState.substring(6,8);
+    hour= actualState.substring(8,10);
+    var id= actualState.substring(10,15);
+    if(hour === "00"){
+        hour= "12";
+        var giorno= eval(day);
+        giorno--;
+        if (giorno>= 10){
+            day= ""+giorno;
+        }
+        else{
+            day= "0"+giorno;
+        }
+    }
+    else hour= "00";
+    if (giorno=="14") return;
+    actualState= year+month+day+hour+id+".csv";
+    //console.log("actualState: "+actualState);
+    actualMetaState= year+month+day+hour+id+"meta.csv";
+    //console.log(actualState);
+    inputData= actualState;
+    inputMetaData= actualMetaState;
+    //oraSond.innerHTML= "Pratica di Mare: Sounding date and time:  "+day+"/ "+month+"/ "+year+"   "+hour+"Z";
+    drawGraph(gran, hmax, hmin, tmax, tmin, inputData);
+    drawMetaGraph(inputMetaData);
+}
+//funzione chiamata quando viene premuto il tasto Next
+function goNext(){
+    G_pasted=false;
+    var oraSond= document.getElementById("oraSondag");
+    var stazione=document.getElementById("info");
+    actualState= inputGlobalData;
+    actualMetaState= inputGlobalMetaData;
+    year= actualState.substring(0,4);
+    month= actualState.substring(4,6);
+    day= actualState.substring(6,8);
+    hour= actualState.substring(8,10);
+    id= actualState.substring(10,15);
+    if(hour === "12"){
+        hour= "00";
+        var giorno= eval(day);
+        giorno++;
+        if (giorno>= 10){
+            day= ""+giorno;
+        }
+        else{
+            day= "0"+giorno;
+        }
+    }
+    else hour= "12";
+    if (giorno=="22") return;
+    actualState= year+month+day+hour+id+".csv";
+    //console.log(actualState);
+    inputData= actualState;
+    actualMetaState= year+month+day+hour+id+"meta.csv";
+    inputMetaData= actualMetaState;
+    oraSond.innerHTML= "Pratica di Mare: Sounding date and time:  "+day+"/ "+month+"/ "+year+"   "+hour+"Z";
+    drawGraph(gran, hmax, hmin, tmax, tmin, inputData);
+    drawMetaGraph(inputMetaData);
+}
+
+// Main program ****************************************************************
+drawGraph(gran, hmax, hmin, tmax, tmin, inputGlobalData);
+drawMetaGraph(inputGlobalMetaData);
+
+
+
+
+
+function get_sounding(){
+    debug=false;
+    G_pasted=true;
+    //document.getElementById("info").innerHTML= "Downloaded sounding :";// +" - "+Date();
+    document.getElementById("info");
+   
+    var userName = document.getElementById('user');
+    var a=user.value;
+    if (debug) console.log("get sounding a=",a);
+    user.value=""
+    //a=a.replace(/\r\n/g,'\n');
+    //a=a.split(/[ ,]+/);
+    a=a.split(/[-]{77}/);
+    //console.log("a",a);
+    Gintestazione=a[0].trim();
+    var s=a[2].trim().split('indices');
+    //console.log("s",s);
+
+    rs=[];  //righe radiosondaggio
+    var meta=[];
+    var mmeta=[];
+    var j=0;
+    for (var i=0;i<s[0].length;i+=78){
+          rs[j]=s[0].substring(i,i+77).trim();
+          rs[j]=rs[j].split(/[ ]+/);
+          j++;
+    }
+    //console.log(intestazione);
+    if (debug) console.log("rs[0+",rs[0]);
+    //console.log(rs[rs.length-1]);
+    s[1]=s[1].trim();
+    meta=s[1].split(":");
+    //console.log("meta", meta,meta.length);
+
+    for (var i=0;i<meta.length;i++){
+        mmeta[i]=meta[i].split(' ')[1];
+        //console.log(mmeta[i]);
+        j++;
+    }
+    
+
+   Gdata=[];
+
+for (var i=0; i<rs.length; i++){
+    var newOgg=new Object();
+    var error=false;
+    var errtype="";  
+        newOgg.POS=i;
+        //console.log("new ogg",newOgg);
+        if (rs[i][0]) newOgg.PRES= parseFloat(rs[i][0]);
+        else {error=true; errtype+="wrongPRES:"+rs[i][0]+" "};
+        if (newOgg.PRES && i==0) {
+            pres0=estimatePres0();
+            pres_notevoli[19]=pres0;
+            pressione_base=pres0;
+            array_t= creaLista_t();
+            computeIsogrom();
+        }
+    
+        newOgg.HGHT= parseInt(rs[i][1]);
+        //newOgg.HGHT= rH0(p2quota(newOgg.PRES));
+         //console.log("new ogg",newOgg);
+        if (rs[i][2]) newOgg.TEMP = parseFloat(rs[i][2]);
+        else {error=true; errtype+="wrongHGHT:"+rs[i][2]+" "};
+
+         //console.log("new ogg",newOgg);
+        if (rs[i][3]) newOgg.DWPT= parseFloat(rs[i][3]);
+        else {error=true; errtype+="wrongDWP:"+rs[i][3]+" "};
+
+         //console.log("new ogg",newOgg);
+        if (rs[i][4]) newOgg.RELH= parseFloat(rs[i][4]);
+        else {error=true; errtype+="wrongRELH:"+rs[i][4]+" "};
+
+         //console.log("new ogg",newOgg);
+        if (rs[i][5]) newOgg.MIXR= parseFloat(rs[i][5]);
+        else {error=true; errtype+="wrongMIXR"+rs[i][5]+" "};
+        //console.log("new ogg",newOgg);
+        //newOgg.DRCT= parseFloat(newOgg.DRCT);
+        //newOgg.SKNT= parseFloat(newOgg.SKNT);
+        //newOgg.THTA= parseFloat(newOgg.THTA);
+        //newOgg.THTE= parseFloat(newOgg.THTE);
+        //newOgg.THTV= parseFloat(newOgg.THTV);
+ 
+
+        if (error) console.log("errore dati riga",i, errtype);
+        else Gdata[i]=newOgg;
+    }
+if (debug) console.log("parsed Gdata",Gdata);
+//for (i in meta) console.log("meta", i,meta[i]);
+
+ 
+Ginformazioni= [];
+
+
+for (i=1; i<mmeta.length;i++)
+Ginformazioni[i-1]=mmeta[i].trim();
+
+if (debug) console.log("Ginformazioni",Ginformazioni);
+
+
+Gmdata=new Array();
+var newOgg= new Object();
+
+
+//for (i in meta) console.log("meta", i,meta[i]);
+
+newOgg.SID= meta[1];
+newOgg.SNUM= parseFloat(meta[2]);
+newOgg.OBST= meta[3];
+newOgg.SLAT= parseFloat(meta[4]);
+newOgg.SLON= parseFloat(meta[5]);
+newOgg.SELEV= parseFloat(meta[6]);
+newOgg.SHIND= parseFloat(meta[7]);
+newOgg.LIFTIND= parseFloat(meta[8]);
+newOgg.LIFTVIRT= parseFloat(meta[9]);
+newOgg.SWTIND= parseFloat(meta[10]);
+newOgg.KIND= parseFloat(meta[11]);
+newOgg.CROSSIND= parseFloat(meta[12]);
+newOgg.VERTIN= parseFloat(meta[13]);
+newOgg.TTIND= parseFloat(meta[14]);
+newOgg.CAPE= parseFloat(meta[15]);
+newOgg.CAPETEMP= parseFloat(meta[16]);
+newOgg.CINS= parseFloat(meta[17]);
+newOgg.CINSTEMP=parseFloat(meta[18]);
+newOgg.BRNUM= parseFloat(meta[19]);
+newOgg.BRCAPV= parseFloat(meta[20]);
+newOgg.TEMPK= parseFloat(meta[21]);
+newOgg.PRESSHPA= parseFloat(meta[22]);
+newOgg.MEANTEMP= parseFloat(meta[23]);
+newOgg.MEANRATIO= parseFloat(meta[24]);
+newOgg.THICK= parseFloat(meta[25]);
+newOgg.PRECWATER= parseFloat(meta[26]);
+
+Gmdata.push(newOgg);
+
+
+drawGraph(gran, hmax, hmin, tmax, tmin, inputGlobalData);
+
+drawMetaGraph(inputGlobalMetaData);
+if (debug) console.log("esco da get_sounding, G_pasted:",G_pasted);
+}
+
+function aggiornaOpzioni(scelta){
+var selezionato = document.form.campo_principale.selectedIndex;
+var campo = document.form.campo_principale.options;
+console.log("aggiornaOpziopni selezionato:",selezionato+20);
+tPrevisione=selezionato+20;
+if (Forecast) {
+        //drawGraph(gran, hmax, hmin, tmax, tmin, inputData); 
+        //drawMetaGraph(inputMetaData);
+        //updateGraph(); 
+        removeForecast();     
+        previsioni(tPrevisione,0.4);
+        previsioni(tPrevisione,0.7);
+        previsioni(tPrevisione,1);
+    }
+}
+</script>
+</script>
+
+</div>
+<!-- **************************** MAIN HTML ***************************************************-->
+<div id="interaction" style="height:700px;width:600px;float:right;">
+    
+
+
+
+<fieldset style="position: absolute;left:740px; top: 120px;">
+    <legend> <b> Paste a sounding from
+        <a target="_blank" href="http://weather.uwyo.edu/upperair/europe.html">http://weather.uwyo.edu/upperair/europe.html</a></b></legend>
+    
+    <input type="text" maxlength="30000" id="user" />
+    <button onclick="get_sounding();" href="javascript:;">Paste</button>
+</fieldset>
+
+
+
+
+
+
+<form id="frm2" style="position: absolute;left:740px; top: 190px;" action="index.html" method="post">
+    <b> Site:   </b> <select name="local" size="1" style="height: 25px;">
+    <option selected value="1"> Pratica di Mare </option>
+    <!--option value="2"> Trapani/Birgi </option> -->
+    <option value="3"> Brindisi </option>
+    <!--option value="4"> Cagliari/Elmas </option> -->
+    <!-- option value="5"> Ajaccio </option-->
+    <option value="6"> Milano/Linate </option>
+    <!---option value="7"> Udine </option-->
+    </select>
+</form>
+
+<button id="back" style="position: absolute; top: 190px; left: 960px;width: 80px" onClick="goBack(); ">Back</button>
+<button id="next" style="position: absolute; top: 190px; left: 1060px; width: 80px" onClick=" goNext();">Next</button>
+
+<form id="frm7" style="position: absolute; left:740px; top: 225px;">
+    <b>&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp PRES &nbsp &nbsp HGHT &nbsp <span style="color:red"> &nbsp TEMP</span> <font color=”#0000FF”>&nbspDWPT</font> &nbsp RELH  &nbsp MIXR </b> <br>
+        
+    <b>&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp hPA&nbsp &nbsp &nbsp &nbsp&nbspKm&nbsp&nbsp &nbsp <font color=red>&nbsp&nbsp&nbsp&nbsp&nbsp&degC&nbsp&nbsp</font> <span style="color="#0000FF"> &nbsp &nbsp&nbsp&nbsp&nbsp&nbsp&degC&nbsp&nbsp</span> &nbsp &nbsp&nbsp&nbsp&nbsp&nbsp&nbsp %  &nbsp&nbsp&nbsp&nbsp&nbsp&nbsp gr/Kg</b> <br>
+    <textarea id="sondaggio" rows="3" cols="55" readonly> </textarea>
+</form>
+
+<fieldset style="position: absolute; top: 330px; left:740px; width: 220px">
+    <legend> <b> Temperature resolution </b></legend>
+    <form id="frm3" action="index 3.html" method="post">
+        <input id="off" name="grana" type="radio" checked value= "off" > off
+        <input id="high" name="grana" type="radio" value= "1" style="position: relative; left: 5px"> 1&degC
+        <input id="medium" name="grana" type="radio" value= "5" checked style="position: relative; left: 5px"> 5&degC
+        <input id="low" name="grana" type="radio" value= "10" style="position: relative; left: 5px"> 10&degC <br>
+    </form>
+    
+</fieldset>
+
+
+<fieldset style="position: absolute; top: 330px; left:995px; width: 170px">
+    <legend> <b> Curves </b> </legend>
+    <input id="curve1" value="adiabSecca" type="checkbox" onClick="checkSecca(this);"> Dry adiabats<br>
+    <input id="curve2" value="adiabSatura" type="checkbox" onClick="checkSatura(this);"> Wet adiabats<br>
+    <input id="curve3" value="isogrom" type="checkbox"  onClick="checkIsoigrom(this);"> Isoiogrometrics<br>
+    <input id="curve4" value="tropo" type="checkbox" checked onClick="checkTP(this);"> T P lines<br>
+    <!--input id="curve6" value="isobare" type="checkbox" checked onClick="checkIsobars(this);"> Isobars<br-->
+    <input id="curve7" value="label mix" type="checkbox" checked onClick="checkLabelMix(this);"> Mix scale<br>
+	<input id="curve9" value="puntiSoundingso" type="checkbox" onClick="checkPuntiSoundingso(this);"> Sounding points<br>
+	<input id="curve10" value="previsioni" type="checkbox" onClick="checkForecast(this);"> Forecast .4 .7 1 Km<br>
+ 
+
+
+<form name="form">
+T ground: 
+<select name="campo_principale" size="1" onChange="aggiornaOpzioni();">
+<option value="20">20</option>
+<option value="21">21</option>
+<option value="22">22</option>
+<option value="23">23</option>
+<option value="24">24</option>
+<option value="25">25</option>
+<option value="26">26</option>
+<option value="27">27</option>
+<option value="28">28</option>
+<option value="29">29</option>
+<option value="30">30</option>
+<option value="31">31</option>
+<option value="32">32</option>
+<option value="33">33</option>
+<option value="34">34</option>
+<option value="35">35</option>
+</select>
+</form>
+
+
+
+
+</fieldset>   
+
+ 
+
+<fieldset style="position: absolute; top: 390px; left:740px; width: 200px">
+    <legend> <b> CIN-CAPE </b> </legend>
+    <input id="cape1" value="cin" type="checkbox"  onClick="checkCin(this);"> Cin-Cape<br>
+    <input id="cape2" value="cin" type="checkbox"  onClick="checkCin500(this);"> Average of first 500m<br>
+</fieldset>
+
+<fieldset style="position: absolute; top: 480px; left:740px; width: 100px">
+    <legend> <b> Soundings </b> </legend>
+    <input id="curve11" value="stato" type="checkbox" checked onClick="checkState(this);"> State<br>
+        <input id="curve22" value="rugiada" type="checkbox" checked onClick="checkDewPoint(this);"> DewPoint<br>
+</fieldset>
+
+<fieldset style="position: absolute; top: 480px; left:875px; width: 90px">
+    <legend> <b> Swap h p</b> </legend>
+    <input id="curve111" value="swapmp" type="checkbox"  onClick="checkswapmp(this);"> Swap <br>
+</fieldset>
+
+
+</div>
+<fieldset style="position: absolute; top: 560px; left:735px; width:200px">
+    <legend> <b> Atmospheric Instability Indicators </b></legend>
+    <div id="weather" style=" height: 250px;width: 440px; float: left; top: 0px ">
+    <form id="frm6" style="position: relative; left:0px; top: 0px;">
+        <textarea id="commento" rows="4" cols="52" readonly>
+        </textarea>
+    </form>
+    </div>
+</fieldset>
+
+<div id="chart" style=" height: 300px;width: 200px; float: left; top: 0px ">
+    
+<fieldset id="informaz" style="position: absolute; left:1200px; top: 200px; width: 350px">
+
+    <legend><b> Station information and sounding indices</b></legend>
+    <textarea id="informazioni1" rows="14" cols="50" readonly style="border-color: transparent">
+    </textarea>
+    <textarea id="informazioni2" rows="14" cols="50" readonly style="border-color: transparent">
+    </textarea>
+</fieldset>
+
+<fieldset id="informaz" style="position: absolute; left:0px; top: 2000px; width: 350px">
+
+</fieldset>
+    
+</div>
+
+</div>
+</body>
+</html>
